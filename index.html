@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Pichaury — Réassort consommables</title>
+<style>
+  :root{
+    --bg: #F2F4F1;
+    --panel: #FFFFFF;
+    --ink: #1B2A28;
+    --ink-soft: #5C6B68;
+    --teal: #1F5652;
+    --teal-deep: #143A37;
+    --line: #DDE3E0;
+    --neutral: #8A9490;
+    --neutral-bg: #EEF0EE;
+    --ok: #3C7A5E;
+    --ok-bg: #E4F0E9;
+    --warn: #C77A1F;
+    --warn-bg: #FBF0DF;
+    --danger: #B4432E;
+    --danger-bg: #FBE7E2;
+    --radius: 14px;
+
+    --rose: #9C5468;
+    --rose-deep: #7A4053;
+    --rose-bg: #FBF1F3;
+    --green: #3F6B4F;
+    --green-deep: #2E5039;
+    --green-bg: #EFF5F1;
+
+    --brand-green: #4E9B6B;
+    --brand-green-deep: #2F6B41;
+
+    --zone-accent: var(--teal);
+    --zone-accent-deep: var(--teal-deep);
+  }
+  body[data-zone="SUD"]{
+    --zone-accent: var(--rose);
+    --zone-accent-deep: var(--rose-deep);
+    --bg: var(--rose-bg);
+  }
+  body[data-zone="NORD"]{
+    --zone-accent: var(--green);
+    --zone-accent-deep: var(--green-deep);
+    --bg: var(--green-bg);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    transition: background .3s ease;
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:0 0 40px;}
+
+  header{
+    color:#fff;
+    padding:22px 22px 20px;
+    border-radius: 0 0 20px 20px;
+    transition: background .3s ease;
+  }
+  header.header-agent{
+    background: linear-gradient(160deg, var(--zone-accent-deep), var(--zone-accent));
+  }
+  header.header-direction{
+    background: linear-gradient(160deg, var(--brand-green-deep), var(--brand-green));
+  }
+  header.header-login{
+    background: linear-gradient(160deg, var(--teal-deep), var(--teal));
+  }
+  header .brand-logo{
+    background:#fff;
+    border-radius:10px;
+    padding:6px 12px;
+    display:inline-block;
+    margin-bottom:12px;
+  }
+  header .brand-logo img{
+    display:block;
+    height:28px;
+    width:auto;
+  }
+  header .site-label{
+    font-size:12.5px;
+    letter-spacing:.02em;
+    color:#BFE0D6;
+    margin:0 0 2px;
+  }
+  header h1{
+    font-size:21px;
+    margin:0 0 14px;
+    font-weight:650;
+    letter-spacing:-.01em;
+  }
+
+  .auth-connected{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:13.5px;
+    margin-bottom:10px;
+  }
+  .auth-connected .who{ color:#fff; }
+  .auth-connected .who .role{ color:#BFE0D6; font-size:12px; }
+  .auth-connected button{
+    background:none;
+    border:none;
+    color:#DCEDE7;
+    font-size:12.5px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+
+  .mode-switch{
+    display:flex;
+    gap:6px;
+    background:rgba(255,255,255,.12);
+    border-radius:11px;
+    padding:4px;
+    max-width:340px;
+  }
+  .mode-switch button{
+    flex:1;
+    padding:8px 0;
+    border:none;
+    border-radius:8px;
+    background:transparent;
+    color:#DCEDE7;
+    font-size:13px;
+    font-weight:650;
+    cursor:pointer;
+  }
+  .mode-switch button.active{
+    background:#fff;
+    color:var(--teal-deep);
+  }
+
+  nav.levels{ display:flex; gap:8px; padding:16px 22px 0; }
+  nav.levels button{
+    flex:1;
+    padding:10px 0;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--ink-soft);
+    font-size:14.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  nav.levels button.active{ background:var(--zone-accent); border-color:var(--zone-accent); color:#fff; }
+
+  nav.zones{ display:flex; gap:8px; padding:10px 22px 0; }
+  nav.zones button{
+    flex:1;
+    padding:8px 0;
+    border-radius:9px;
+    border:1px solid transparent;
+    background:var(--neutral-bg);
+    color:var(--ink-soft);
+    font-size:13.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  nav.zones button.active{ background:#fff; border-color:var(--zone-accent); color:var(--zone-accent-deep); }
+
+  main{padding:14px 22px 0;}
+
+  /* --- Écran de connexion --- */
+  .login-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:26px 22px;
+    text-align:center;
+    margin-top:10px;
+  }
+  .login-card p{ color:var(--ink-soft); font-size:13.5px; margin:0 0 16px; }
+  .login-card input{
+    width:100%;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+    font-size:16px;
+    text-align:center;
+    margin-bottom:12px;
+  }
+  .login-card button{
+    width:100%;
+    background:var(--teal);
+    color:#fff;
+    border:none;
+    border-radius:10px;
+    padding:12px 0;
+    font-size:14.5px;
+    font-weight:650;
+    cursor:pointer;
+  }
+
+  /* --- Alerte --- */
+  .alert-banner{
+    background:var(--danger-bg);
+    border:1px solid #EBC3B8;
+    border-radius:12px;
+    padding:12px 14px;
+    margin-bottom:14px;
+    font-size:13px;
+    color:var(--danger);
+    font-weight:600;
+    line-height:1.4;
+  }
+
+  /* --- Stock global --- */
+  .stock-panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px;
+    margin-bottom:18px;
+  }
+  .stock-panel h3{ margin:0 0 10px; font-size:14px; color:var(--teal-deep); font-weight:700; }
+  .stock-row{ padding:10px 0; border-bottom:1px solid var(--line); }
+  .stock-row:last-child{ border-bottom:none; }
+  .stock-row-top{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .stock-label{ font-size:13.5px; font-weight:650; }
+  .stock-input-block{ display:flex; align-items:center; gap:6px; }
+  .stock-input-block input{
+    width:64px; text-align:center; border:1px solid var(--line);
+    border-radius:8px; padding:6px 4px; font-size:14px; font-weight:650;
+  }
+  .stock-unit{ font-size:11.5px; color:var(--ink-soft); }
+  .stock-detail{ font-size:12px; color:var(--ink-soft); margin-top:6px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .stock-tag{ font-size:11px; padding:2px 9px; border-radius:20px; font-weight:650; white-space:nowrap; }
+  .tag-critique{ background:var(--danger-bg); color:var(--danger); }
+  .tag-surveiller{ background:var(--warn-bg); color:var(--warn); }
+  .tag-ok{ background:var(--ok-bg); color:var(--ok); }
+  .tag-neutral{ background:var(--neutral-bg); color:var(--neutral); }
+
+  .bloc{ margin-bottom:16px; }
+  .bloc-header{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; padding:0 2px; }
+  .bloc-name{ font-size:15px; font-weight:700; color:var(--zone-accent-deep); }
+  .bloc-config{ font-size:11.5px; color:var(--ink-soft); }
+
+  .item{
+    background:var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+    padding:13px 14px; margin-bottom:8px;
+  }
+  .item-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .item-name{ font-size:14.5px; font-weight:650; line-height:1.25; }
+  .item-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+
+  .chips{ display:flex; gap:8px; margin-top:11px; }
+  .chip{
+    flex:1; height:38px; border-radius:10px; border:1px solid var(--line); background:#fff;
+    font-size:15px; font-weight:650; color:var(--ink-soft); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .chip:active{ background:var(--zone-accent); border-color:var(--zone-accent); color:#fff; }
+  .chip-label{ font-size:11px; color:var(--ink-soft); margin-top:6px; }
+
+  #mainContent.view-agent .item{ border-left:4px solid var(--zone-accent); }
+  #mainContent.view-agent .chip-label{ color:var(--zone-accent-deep); }
+
+  .stat-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); font-size:13.5px; }
+  .stat-row:last-child{ border-bottom:none; }
+  .stat-name{ color:var(--ink); }
+  .stat-total{ font-weight:700; color:var(--teal-deep); display:flex; align-items:baseline; gap:4px; }
+  .stat-unit{ font-size:11px; color:var(--ink-soft); font-weight:500; }
+  .stat-sub{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+
+  .journal{ margin-top:22px; }
+  .journal h3{ font-size:13.5px; color:var(--ink-soft); margin:0 0 8px; padding:0 2px; }
+  .journal-entry{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; margin-bottom:6px; font-size:12.5px; color:var(--ink-soft);
+    display:flex; justify-content:space-between; gap:8px;
+  }
+  .journal-entry strong{ color:var(--ink); }
+  .journal-empty{ text-align:center; color:var(--ink-soft); font-size:13px; padding:20px 10px; }
+
+  /* --- Graphiques consommation --- */
+  .chart-section{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; margin-bottom:14px;
+  }
+  .chart-section h3{ margin:0 0 4px; font-size:14.5px; color:var(--ink); font-weight:700; }
+  .chart-section .chart-sub{ font-size:11.5px; color:var(--ink-soft); margin-bottom:12px; }
+  .bar-row{ margin-bottom:10px; }
+  .bar-row:last-child{ margin-bottom:0; }
+  .bar-label-row{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:12.5px; margin-bottom:4px;
+  }
+  .bar-label-row .bar-place{ font-weight:650; color:var(--ink); }
+  .bar-label-row .bar-place .bar-dot{
+    display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px;
+  }
+  .bar-label-row .bar-value{ color:var(--ink-soft); font-size:12px; white-space:nowrap; }
+  .bar-track{
+    background:var(--neutral-bg); border-radius:8px; height:12px; overflow:hidden;
+  }
+  .bar-fill{ height:100%; border-radius:8px; min-width:2px; transition:width .4s ease; }
+  .bar-fill.zone-SUD{ background:var(--rose); }
+  .bar-fill.zone-NORD{ background:var(--green); }
+
+  .level-heading{
+    font-size:12.5px; text-transform:none; color:var(--ink-soft); font-weight:700;
+    margin:20px 0 8px; padding:0 2px;
+  }
+  .level-heading:first-child{ margin-top:0; }
+  .bloc-zone-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+  .bloc-zone-dot.zone-SUD{ background:var(--rose); }
+  .bloc-zone-dot.zone-NORD{ background:var(--green); }
+
+  /* --- Gestion des accès --- */
+  .access-panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px; margin-top:22px;
+  }
+  .access-panel h3{ margin:0 0 10px; font-size:14px; color:var(--teal-deep); font-weight:700; }
+  .access-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;
+  }
+  .access-row:last-child{ border-bottom:none; }
+  .access-row .who{ font-weight:650; }
+  .access-row .role-badge{
+    font-size:10.5px; padding:1px 7px; border-radius:20px; margin-left:6px; font-weight:650;
+  }
+  .role-agent{ background:var(--neutral-bg); color:var(--ink-soft); }
+  .role-direction{ background:var(--ok-bg); color:var(--ok); }
+  .access-row .code{ color:var(--ink-soft); font-family:monospace; font-size:12px; }
+  .access-row .del-btn{
+    background:none; border:none; color:#B7ABA6; font-size:12px; cursor:pointer;
+  }
+  .access-add{ display:flex; gap:6px; margin-top:12px; flex-wrap:wrap; }
+  .access-add input{
+    flex:1; min-width:90px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13px;
+  }
+  .access-add select{
+    border:1px solid var(--line); border-radius:8px; padding:8px 6px; font-size:13px;
+  }
+  .access-add button{
+    background:var(--teal); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:650; cursor:pointer;
+  }
+
+  .footer-note{
+    text-align:center; font-size:11.5px; color:#9AA6A3; margin-top:18px; padding:0 30px;
+  }
+
+  .toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:var(--teal-deep); color:#fff; padding:9px 16px; border-radius:20px;
+    font-size:13px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:80%; text-align:center;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header id="appHeader">
+    <div class="brand-logo"><img src="data:image/jpeg;base64,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" alt="Apelnet"></div>
+    <p class="site-label">APELNET — Chantier</p>
+    <h1>Pichaury · Réassort consommables</h1>
+    <div id="headerAuthArea"></div>
+  </header>
+
+  <nav class="levels" id="levelNav"></nav>
+  <nav class="zones" id="zoneNav"></nav>
+
+  <main id="mainContent"></main>
+
+  <p class="footer-note" id="footerNote"></p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LOG_KEY = "pichaury-reassort-log";
+const STOCK_KEY = "pichaury-stock-global";
+const PEOPLE_KEY = "pichaury-people";
+const CONN_LOG_KEY = "pichaury-connexions-log";
+
+const LEVELS = ["RDC", "R+1", "R+2"];
+const ZONES = ["SUD", "NORD"];
+const MAX_LOG_ENTRIES = 1000;
+const MAX_CONN_ENTRIES = 500;
+const CONSO_WINDOW_DAYS = 14;
+const CRITICAL_DAYS = 5;
+const WATCH_DAYS = 10;
+
+const TYPE_CONFIG = {
+  papier: { label: "Papier toilette", unit: "rouleau(x)", stockUnit: "rouleau(x)", values: [1,2,3,4,5] },
+  essuie: { label: "Essuie-mains",    unit: "paquet(s)",  stockUnit: "carton(s)",  values: [1,2,3] },
+  savon:  { label: "Savon mains",     unit: "cartouche",  stockUnit: "cartouche",  values: [0,1] },
+};
+
+// Config réelle du bâtiment, communiquée par Pierre le 09/09/2026.
+function buildBuilding(){
+  function bloc(name, wc, essuie, savon){
+    return { id: name.toLowerCase().replace(/\s+/g,"-"), name, wc, essuie, savon };
+  }
+  return {
+    "R+2": {
+      "SUD":  [ bloc("Sanitaires Sud",  5, 1, 1) ],
+      "NORD": [ bloc("Sanitaires Nord", 5, 1, 1) ],
+    },
+    "R+1": {
+      "SUD":  [ bloc("Sanitaires Sud",  5, 1, 1) ],
+      "NORD": [ bloc("Sanitaires Nord", 5, 1, 1) ],
+    },
+    "RDC": {
+      "SUD": [
+        bloc("WC principaux Sud", 5, 1, 1),
+        bloc("Salle de sport",    2, 2, 2),
+      ],
+      "NORD": [
+        bloc("Bloc Nord 1", 5, 1, 1),
+        bloc("Bloc Nord 2", 5, 1, 1),
+      ],
+    },
+  };
+}
+const BUILDING = buildBuilding();
+
+function cryptoId(){ return Math.random().toString(36).slice(2, 10); }
+function emptyStock(){
+  return {
+    papier: { qty: null, updatedAt: "", updatedBy: "" },
+    essuie: { qty: null, updatedAt: "", updatedBy: "", ratio: null },
+    savon:  { qty: null, updatedAt: "", updatedBy: "" },
+  };
+}
+
+// Personnes par défaut — Pierre pourra ajouter les agents depuis la vue direction.
+function defaultPeople(){
+  return [
+    { id: cryptoId(), name: "Pierre", code: "PIERRE1", role: "direction" },
+    { id: cryptoId(), name: "Naïb",   code: "NAIB1",   role: "direction" },
+    { id: cryptoId(), name: "Rémi",   code: "REMI1",   role: "direction" },
+  ];
+}
+
+let appState = "login"; // "login" | "app"
+let mode = "agent";     // "agent" | "direction"
+let currentLevel = LEVELS[0];
+let currentZone = ZONES[0];
+let currentPerson = null;
+let people = [];
+let connLog = [];
+let log = [];
+let stock = emptyStock();
+
+const headerAuthAreaEl = document.getElementById("headerAuthArea");
+const levelNavEl = document.getElementById("levelNav");
+const zoneNavEl = document.getElementById("zoneNav");
+const mainContentEl = document.getElementById("mainContent");
+const footerNoteEl = document.getElementById("footerNote");
+const toastEl = document.getElementById("toast");
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  setTimeout(()=> toastEl.classList.remove("show"), 1900);
+}
+
+function formatDateTime(iso){
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  if(sameDay) return "aujourd'hui à " + time;
+  return d.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'}) + " à " + time;
+}
+
+// ---------- Chargement / sauvegarde ----------
+
+async function apiGet(key){
+  try{
+    const res = await fetch(`/.netlify/functions/storage?key=${encodeURIComponent(key)}`);
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(data.value === null || data.value === undefined) return null;
+    return { key, value: data.value };
+  }catch(e){
+    console.error("Échec de lecture", key, e);
+    return null;
+  }
+}
+
+async function apiSet(key, value){
+  try{
+    const res = await fetch("/.netlify/functions/storage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key, value }),
+    });
+    if(!res.ok) return null;
+    return { key, value };
+  }catch(e){
+    console.error("Échec d'écriture", key, e);
+    return null;
+  }
+}
+
+async function storageSetWithRetry(key, value, shared, retries){
+  retries = retries === undefined ? 2 : retries;
+  let lastError = null;
+  for(let attempt = 0; attempt <= retries; attempt++){
+    const res = await apiSet(key, value);
+    if(res) return res;
+    lastError = "échec d'écriture";
+    console.error(`Échec sauvegarde ${key} (essai ${attempt + 1}/${retries + 1})`);
+    if(attempt < retries){
+      await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+    }
+  }
+  console.error(`Sauvegarde définitivement échouée pour ${key}`, lastError);
+  return null;
+}
+
+async function loadPeople(){
+  const res = await apiGet(PEOPLE_KEY);
+  if(res && res.value){
+    people = JSON.parse(res.value);
+    return;
+  }
+  people = defaultPeople();
+  await savePeople();
+}
+
+async function savePeople(){
+  const res = await storageSetWithRetry(PEOPLE_KEY, JSON.stringify(people), true);
+  if(!res) showToast("Erreur d'enregistrement des accès — réessayez");
+}
+
+async function loadConnLog(){
+  const res = await apiGet(CONN_LOG_KEY);
+  if(res && res.value){
+    connLog = JSON.parse(res.value);
+    return;
+  }
+  connLog = [];
+}
+
+async function saveConnLog(){
+  if(connLog.length > MAX_CONN_ENTRIES){
+    connLog = connLog.slice(connLog.length - MAX_CONN_ENTRIES);
+  }
+  await storageSetWithRetry(CONN_LOG_KEY, JSON.stringify(connLog), true);
+}
+
+async function loadLog(){
+  const res = await apiGet(LOG_KEY);
+  if(res && res.value){ log = JSON.parse(res.value); return; }
+  log = [];
+}
+
+async function saveLog(){
+  if(log.length > MAX_LOG_ENTRIES){
+    log = log.slice(log.length - MAX_LOG_ENTRIES);
+  }
+  const res = await storageSetWithRetry(LOG_KEY, JSON.stringify(log), true);
+  if(!res) showToast("Erreur d'enregistrement — réessayez");
+}
+
+async function loadStock(){
+  const res = await apiGet(STOCK_KEY);
+  if(res && res.value){
+    stock = Object.assign(emptyStock(), JSON.parse(res.value));
+    return;
+  }
+  stock = emptyStock();
+}
+
+async function saveStock(){
+  const res = await storageSetWithRetry(STOCK_KEY, JSON.stringify(stock), true);
+  if(!res) showToast("Erreur d'enregistrement du stock — réessayez");
+}
+
+// ---------- Authentification par code personnel ----------
+
+async function attemptLogin(code){
+  const trimmed = (code || "").trim();
+  if(!trimmed){ showToast("Entrez votre code"); return; }
+  const person = people.find(p => p.code.toLowerCase() === trimmed.toLowerCase());
+  if(!person){
+    showToast("Code non reconnu — contactez Pierre");
+    return;
+  }
+  currentPerson = person;
+  appState = "app";
+  mode = "agent";
+  await logConnexion(person);
+  render();
+}
+
+async function logConnexion(person){
+  connLog.push({
+    id: cryptoId(),
+    personId: person.id,
+    name: person.name,
+    role: person.role,
+    at: new Date().toISOString(),
+  });
+  await saveConnLog();
+}
+
+function logout(){
+  currentPerson = null;
+  appState = "login";
+  mode = "agent";
+  render();
+}
+
+async function addPerson(name, code, role){
+  name = (name || "").trim();
+  code = (code || "").trim();
+  if(!name || !code){ showToast("Nom et code requis"); return; }
+  if(people.some(p => p.code.toLowerCase() === code.toLowerCase())){
+    showToast("Ce code est déjà utilisé");
+    return;
+  }
+  people.push({ id: cryptoId(), name, code, role: role === "direction" ? "direction" : "agent" });
+  await savePeople();
+  showToast("Accès ajouté pour " + name);
+  render();
+}
+
+async function removePerson(id){
+  people = people.filter(p => p.id !== id);
+  await savePeople();
+  render();
+}
+
+// ---------- Réassort & stock ----------
+
+async function addReassort(level, zone, bloc, type, qty, unit){
+  const nowIso = new Date().toISOString();
+  const entry = {
+    id: cryptoId(),
+    level, zone,
+    blocId: bloc.id,
+    blocName: bloc.name,
+    type, qty, unit: unit || 1,
+    agent: currentPerson ? currentPerson.name : "inconnu",
+    at: nowIso,
+  };
+  log.push(entry);
+  await saveLog();
+
+  // Le réassort prélève sur le stock global du dépôt, s'il est défini.
+  // Essuie-mains : réassort en paquets, stock en cartons -> on ne déduit
+  // que si le nombre de paquets par carton a été renseigné.
+  if(type === "essuie"){
+    if(stock.essuie.qty !== null && stock.essuie.ratio){
+      stock.essuie.qty = Math.max(0, stock.essuie.qty - qty / stock.essuie.ratio);
+      stock.essuie.updatedAt = nowIso;
+      await saveStock();
+    }
+  } else if(stock[type].qty !== null){
+    stock[type].qty = Math.max(0, stock[type].qty - qty);
+    stock[type].updatedAt = nowIso;
+    await saveStock();
+  }
+
+  const cfg = TYPE_CONFIG[type];
+  showToast(`Réassort noté : ${qty} ${cfg.unit} — ${bloc.name}`);
+}
+
+async function updateStock(type, value){
+  const cfg = TYPE_CONFIG[type];
+  const v = parseFloat(value);
+  if(isNaN(v) || v < 0) return;
+  stock[type] = Object.assign({}, stock[type], {
+    qty: v,
+    updatedAt: new Date().toISOString(),
+    updatedBy: currentPerson ? currentPerson.name : "direction",
+  });
+  await saveStock();
+  showToast(`Stock ${cfg.label.toLowerCase()} mis à jour : ${v} ${cfg.stockUnit}`);
+  render();
+}
+
+async function updateRatio(value){
+  const v = parseInt(value, 10);
+  if(isNaN(v) || v <= 0){ showToast("Nombre de paquets par carton invalide"); return; }
+  stock.essuie = Object.assign({}, stock.essuie, { ratio: v });
+  await saveStock();
+  showToast(`Conversion enregistrée : ${v} paquets par carton`);
+  render();
+}
+
+function consumptionRate(type){
+  const cutoff = Date.now() - CONSO_WINDOW_DAYS * 24 * 3600 * 1000;
+  const total = log
+    .filter(e => e.type === type && new Date(e.at).getTime() >= cutoff)
+    .reduce((sum, e) => sum + e.qty, 0);
+  return total / CONSO_WINDOW_DAYS;
+}
+
+function stockStatus(type){
+  const s = stock[type];
+  const rawRate = consumptionRate(type); // exprimé dans l'unité de réassort (cfg.unit)
+
+  if(s.qty === null) return { tag: "neutral", label: "Stock non renseigné", rate: rawRate, daysLeft: null };
+
+  if(type === "essuie" && !s.ratio){
+    return { tag: "neutral", label: "Indiquez paquets/carton", rate: rawRate, daysLeft: null };
+  }
+
+  const ratio = type === "essuie" ? s.ratio : 1;
+  const rateInStockUnit = rawRate / ratio;
+
+  if(s.qty <= 0) return { tag: "critique", label: "Stock épuisé", rate: rawRate, daysLeft: 0 };
+  if(rateInStockUnit <= 0) return { tag: "ok", label: "Pas de conso. récente", rate: rawRate, daysLeft: null };
+  const daysLeft = s.qty / rateInStockUnit;
+  if(daysLeft <= CRITICAL_DAYS) return { tag: "critique", label: `Reste ~${Math.round(daysLeft)} j`, rate: rawRate, daysLeft };
+  if(daysLeft <= WATCH_DAYS) return { tag: "surveiller", label: `Reste ~${Math.round(daysLeft)} j`, rate: rawRate, daysLeft };
+  return { tag: "ok", label: `Reste ~${Math.round(daysLeft)} j`, rate: rawRate, daysLeft };
+}
+
+function tagClass(tag){
+  if(tag === "critique") return "tag-critique";
+  if(tag === "surveiller") return "tag-surveiller";
+  if(tag === "ok") return "tag-ok";
+  return "tag-neutral";
+}
+
+// ---------- Navigation ----------
+
+function renderLevelNav(){
+  levelNavEl.innerHTML = "";
+  LEVELS.forEach(level => {
+    const btn = document.createElement("button");
+    btn.textContent = level;
+    if(level === currentLevel) btn.classList.add("active");
+    btn.addEventListener("click", () => { currentLevel = level; render(); });
+    levelNavEl.appendChild(btn);
+  });
+}
+
+function renderZoneNav(){
+  zoneNavEl.innerHTML = "";
+  ZONES.forEach(zone => {
+    const btn = document.createElement("button");
+    btn.textContent = "Partie " + zone.charAt(0) + zone.slice(1).toLowerCase();
+    if(zone === currentZone) btn.classList.add("active");
+    btn.addEventListener("click", () => { currentZone = zone; render(); });
+    zoneNavEl.appendChild(btn);
+  });
+}
+
+// ---------- Écran de connexion ----------
+
+function renderLoginScreen(){
+  headerAuthAreaEl.innerHTML = "";
+  levelNavEl.innerHTML = "";
+  zoneNavEl.innerHTML = "";
+  footerNoteEl.textContent = "Chaque connexion (agent ou direction) est enregistrée avec l'heure.";
+
+  mainContentEl.innerHTML = "";
+  const card = document.createElement("div");
+  card.className = "login-card";
+  card.innerHTML = `
+    <p>Entrez votre code personnel pour accéder à l'appli.</p>
+    <input type="text" id="loginInput" placeholder="Votre code" autocomplete="off" />
+    <button id="loginSubmit">Se connecter</button>
+  `;
+  mainContentEl.appendChild(card);
+
+  const input = document.getElementById("loginInput");
+  const submit = document.getElementById("loginSubmit");
+  submit.addEventListener("click", () => attemptLogin(input.value));
+  input.addEventListener("keydown", (e) => { if(e.key === "Enter") attemptLogin(input.value); });
+  setTimeout(() => input.focus(), 50);
+}
+
+function renderHeaderAuth(){
+  headerAuthAreaEl.innerHTML = "";
+
+  const row = document.createElement("div");
+  row.className = "auth-connected";
+  const who = document.createElement("div");
+  who.className = "who";
+  who.innerHTML = `Connecté : <strong>${currentPerson.name}</strong> <span class="role">(${currentPerson.role === "direction" ? "Direction" : "Agent"})</span>`;
+  const logoutBtn = document.createElement("button");
+  logoutBtn.textContent = "Se déconnecter";
+  logoutBtn.addEventListener("click", logout);
+  row.appendChild(who);
+  row.appendChild(logoutBtn);
+  headerAuthAreaEl.appendChild(row);
+
+  if(currentPerson.role === "direction"){
+    const switcher = document.createElement("div");
+    switcher.className = "mode-switch";
+    ["agent","direction"].forEach(m => {
+      const btn = document.createElement("button");
+      btn.textContent = m === "agent" ? "Agent — réassort" : "Direction — suivi";
+      if(mode === m) btn.classList.add("active");
+      btn.addEventListener("click", () => { mode = m; render(); });
+      switcher.appendChild(btn);
+    });
+    headerAuthAreaEl.appendChild(switcher);
+  }
+
+  footerNoteEl.textContent = mode === "agent"
+    ? "Chaque réassort enregistré note la quantité remise, l'heure et votre nom."
+    : "Le stock se met à jour automatiquement à chaque réassort noté par les agents.";
+}
+
+// ---------- Vue agent ----------
+
+function lastEntryFor(level, zone, blocId, type, unit){
+  for(let i = log.length - 1; i >= 0; i--){
+    const e = log[i];
+    if(e.level === level && e.zone === zone && e.blocId === blocId && e.type === type && (e.unit || 1) === unit) return e;
+  }
+  return null;
+}
+
+const DIST_FIELD = { papier: "wc", essuie: "essuie", savon: "savon" };
+
+function renderAgentItemCard(bloc, type, unit, totalUnits){
+  const cfg = TYPE_CONFIG[type];
+  const dist = bloc[DIST_FIELD[type]];
+  const last = lastEntryFor(currentLevel, currentZone, bloc.id, type, unit);
+
+  const card = document.createElement("div");
+  card.className = "item";
+
+  const top = document.createElement("div");
+  top.className = "item-top";
+  const nameBlock = document.createElement("div");
+  const name = document.createElement("div");
+  name.className = "item-name";
+  name.textContent = cfg.label + (totalUnits > 1 ? " — distributeur " + unit + "/" + totalUnits : "");
+  const meta = document.createElement("div");
+  meta.className = "item-meta";
+  const distLabel = totalUnits > 1
+    ? "distributeur " + unit + " sur " + totalUnits
+    : dist + " distributeur" + (dist > 1 ? "s" : "");
+  meta.textContent = last
+    ? distLabel + " · dernier réassort " + formatDateTime(last.at) + " (" + last.qty + " " + cfg.unit + ", " + last.agent + ")"
+    : distLabel + " · pas encore de réassort noté";
+  nameBlock.appendChild(name);
+  nameBlock.appendChild(meta);
+  top.appendChild(nameBlock);
+  card.appendChild(top);
+
+  const chips = document.createElement("div");
+  chips.className = "chips";
+  cfg.values.forEach(v => {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = v;
+    chip.addEventListener("click", async () => {
+      await addReassort(currentLevel, currentZone, bloc, type, v, unit);
+      render();
+    });
+    chips.appendChild(chip);
+  });
+  card.appendChild(chips);
+
+  const label = document.createElement("div");
+  label.className = "chip-label";
+  label.textContent = "Quantité remise (" + cfg.unit + ")";
+  card.appendChild(label);
+
+  return card;
+}
+
+function renderAgentTypeCards(bloc, type){
+  if(type === "papier"){
+    return [ renderAgentItemCard(bloc, "papier", 1, 1) ];
+  }
+  const n = bloc[DIST_FIELD[type]] || 1;
+  const cards = [];
+  for(let i = 1; i <= n; i++){
+    cards.push(renderAgentItemCard(bloc, type, i, n));
+  }
+  return cards;
+}
+
+function renderAgentView(){
+  mainContentEl.innerHTML = "";
+  const blocs = BUILDING[currentLevel][currentZone] || [];
+  blocs.forEach(bloc => {
+    const section = document.createElement("div");
+    section.className = "bloc";
+    const header = document.createElement("div");
+    header.className = "bloc-header";
+    const name = document.createElement("div");
+    name.className = "bloc-name";
+    name.textContent = bloc.name;
+    const config = document.createElement("div");
+    config.className = "bloc-config";
+    config.textContent = bloc.wc + " WC";
+    header.appendChild(name);
+    header.appendChild(config);
+    section.appendChild(header);
+
+    section.appendChild(renderAgentItemCard(bloc, "papier", 1, 1));
+    renderAgentTypeCards(bloc, "essuie").forEach(c => section.appendChild(c));
+    renderAgentTypeCards(bloc, "savon").forEach(c => section.appendChild(c));
+
+    mainContentEl.appendChild(section);
+  });
+}
+
+// ---------- Vue direction ----------
+
+function totalsFor(level, zone, blocId, type){
+  let total = 0, count = 0, last = null;
+  log.forEach(e => {
+    if(e.level === level && e.zone === zone && e.blocId === blocId && e.type === type){
+      total += e.qty;
+      count += 1;
+      if(!last || e.at > last.at) last = e;
+    }
+  });
+  return { total, count, last };
+}
+
+function flatBlocs(){
+  const list = [];
+  LEVELS.forEach(level => {
+    ZONES.forEach(zone => {
+      (BUILDING[level][zone] || []).forEach(bloc => {
+        list.push({ level, zone, bloc });
+      });
+    });
+  });
+  return list;
+}
+
+function blocAvgDaily(level, zone, blocId, type){
+  const cutoff = Date.now() - CONSO_WINDOW_DAYS * 24 * 3600 * 1000;
+  const total = log
+    .filter(e => e.level === level && e.zone === zone && e.blocId === blocId && e.type === type && new Date(e.at).getTime() >= cutoff)
+    .reduce((s, e) => s + e.qty, 0);
+  return total / CONSO_WINDOW_DAYS;
+}
+
+function renderAlertBanner(){
+  const critiques = Object.keys(TYPE_CONFIG)
+    .map(type => ({ type, status: stockStatus(type) }))
+    .filter(s => s.status.tag === "critique");
+  if(critiques.length === 0) return null;
+  const banner = document.createElement("div");
+  banner.className = "alert-banner";
+  const parts = critiques.map(c => `${TYPE_CONFIG[c.type].label} (${c.status.label.toLowerCase()})`);
+  banner.textContent = "⚠ Stock critique : " + parts.join(" · ");
+  return banner;
+}
+
+function renderConsumptionCharts(){
+  const container = document.createElement("div");
+  const blocs = flatBlocs();
+
+  Object.keys(TYPE_CONFIG).forEach(type => {
+    const cfg = TYPE_CONFIG[type];
+    const rows = blocs.map(({level, zone, bloc}) => ({
+      level, zone, bloc,
+      value: blocAvgDaily(level, zone, bloc.id, type),
+    }));
+    const max = Math.max(0.0001, ...rows.map(r => r.value));
+
+    const section = document.createElement("div");
+    section.className = "chart-section";
+    const h3 = document.createElement("h3");
+    h3.textContent = cfg.label + " — consommation moyenne par emplacement";
+    const sub = document.createElement("div");
+    sub.className = "chart-sub";
+    sub.textContent = `Moyenne journalière sur les ${CONSO_WINDOW_DAYS} derniers jours (${cfg.unit})`;
+    section.appendChild(h3);
+    section.appendChild(sub);
+
+    rows
+      .slice()
+      .sort((a, b) => b.value - a.value)
+      .forEach(r => {
+        const row = document.createElement("div");
+        row.className = "bar-row";
+
+        const labelRow = document.createElement("div");
+        labelRow.className = "bar-label-row";
+        const place = document.createElement("span");
+        place.className = "bar-place";
+        place.innerHTML = `<span class="bar-dot" style="background:${r.zone === 'SUD' ? 'var(--rose)' : 'var(--green)'}"></span>${r.bloc.name} (${r.level})`;
+        const value = document.createElement("span");
+        value.className = "bar-value";
+        value.textContent = r.value > 0 ? r.value.toFixed(1) + " /j" : "—";
+        labelRow.appendChild(place);
+        labelRow.appendChild(value);
+
+        const track = document.createElement("div");
+        track.className = "bar-track";
+        const fill = document.createElement("div");
+        fill.className = "bar-fill zone-" + r.zone;
+        const pct = r.value > 0 ? Math.max(3, (r.value / max) * 100) : 0;
+        fill.style.width = pct + "%";
+        track.appendChild(fill);
+
+        row.appendChild(labelRow);
+        row.appendChild(track);
+        section.appendChild(row);
+      });
+
+    container.appendChild(section);
+  });
+
+  return container;
+}
+
+function renderStockPanel(){
+  const panel = document.createElement("div");
+  panel.className = "stock-panel";
+  const h3 = document.createElement("h3");
+  h3.textContent = "Stock global au dépôt";
+  panel.appendChild(h3);
+
+  Object.keys(TYPE_CONFIG).forEach(type => {
+    const cfg = TYPE_CONFIG[type];
+    const s = stock[type];
+    const status = stockStatus(type);
+
+    const row = document.createElement("div");
+    row.className = "stock-row";
+
+    const top = document.createElement("div");
+    top.className = "stock-row-top";
+    const label = document.createElement("div");
+    label.className = "stock-label";
+    label.textContent = cfg.label;
+
+    const inputBlock = document.createElement("div");
+    inputBlock.className = "stock-input-block";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.placeholder = "—";
+    if(s.qty !== null) input.value = s.qty;
+    input.addEventListener("change", (e) => updateStock(type, e.target.value));
+    const unit = document.createElement("span");
+    unit.className = "stock-unit";
+    unit.textContent = cfg.stockUnit;
+    inputBlock.appendChild(input);
+    inputBlock.appendChild(unit);
+
+    top.appendChild(label);
+    top.appendChild(inputBlock);
+    row.appendChild(top);
+
+    if(type === "essuie"){
+      const ratioRow = document.createElement("div");
+      ratioRow.className = "stock-input-block";
+      ratioRow.style.marginTop = "6px";
+      ratioRow.style.justifyContent = "flex-end";
+      const ratioLabel = document.createElement("span");
+      ratioLabel.className = "stock-unit";
+      ratioLabel.textContent = "paquets / carton :";
+      const ratioInput = document.createElement("input");
+      ratioInput.type = "number";
+      ratioInput.min = "1";
+      ratioInput.placeholder = "?";
+      ratioInput.style.width = "50px";
+      if(s.ratio) ratioInput.value = s.ratio;
+      ratioInput.addEventListener("change", (e) => updateRatio(e.target.value));
+      ratioRow.appendChild(ratioLabel);
+      ratioRow.appendChild(ratioInput);
+      row.appendChild(ratioRow);
+    }
+
+    const detail = document.createElement("div");
+    detail.className = "stock-detail";
+    const rateTxt = status.rate > 0
+      ? `conso. ~${status.rate.toFixed(1)} ${cfg.unit}/j (${CONSO_WINDOW_DAYS}j)`
+      : `pas de conso. sur ${CONSO_WINDOW_DAYS}j`;
+    const left = document.createElement("span");
+    left.textContent = rateTxt + (s.updatedAt ? " · maj " + formatDateTime(s.updatedAt) : "");
+    const tag = document.createElement("span");
+    tag.className = "stock-tag " + tagClass(status.tag);
+    tag.textContent = status.label;
+    detail.appendChild(left);
+    detail.appendChild(tag);
+    row.appendChild(detail);
+
+    panel.appendChild(row);
+  });
+
+  return panel;
+}
+
+function renderAccessPanel(){
+  const panel = document.createElement("div");
+  panel.className = "access-panel";
+  const h3 = document.createElement("h3");
+  h3.textContent = "Gérer les accès";
+  panel.appendChild(h3);
+
+  people.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "access-row";
+    const left = document.createElement("div");
+    left.innerHTML = `<span class="who">${p.name}</span><span class="role-badge ${p.role === "direction" ? "role-direction" : "role-agent"}">${p.role === "direction" ? "Direction" : "Agent"}</span>`;
+    const right = document.createElement("div");
+    right.style.display = "flex";
+    right.style.alignItems = "center";
+    right.style.gap = "10px";
+    const codeSpan = document.createElement("span");
+    codeSpan.className = "code";
+    codeSpan.textContent = p.code;
+    const delBtn = document.createElement("button");
+    delBtn.className = "del-btn";
+    delBtn.textContent = "Supprimer";
+    delBtn.addEventListener("click", () => removePerson(p.id));
+    right.appendChild(codeSpan);
+    right.appendChild(delBtn);
+    row.appendChild(left);
+    row.appendChild(right);
+    panel.appendChild(row);
+  });
+
+  const addRow = document.createElement("div");
+  addRow.className = "access-add";
+  addRow.innerHTML = `
+    <input type="text" id="newPersonName" placeholder="Prénom" />
+    <input type="text" id="newPersonCode" placeholder="Code" />
+    <select id="newPersonRole">
+      <option value="agent">Agent</option>
+      <option value="direction">Direction</option>
+    </select>
+    <button id="newPersonAdd">Ajouter</button>
+  `;
+  panel.appendChild(addRow);
+
+  panel.querySelector("#newPersonAdd").addEventListener("click", () => {
+    const name = panel.querySelector("#newPersonName").value;
+    const code = panel.querySelector("#newPersonCode").value;
+    const role = panel.querySelector("#newPersonRole").value;
+    addPerson(name, code, role);
+  });
+
+  return panel;
+}
+
+function renderConnexionsPanel(){
+  const journal = document.createElement("div");
+  journal.className = "journal";
+  const h3 = document.createElement("h3");
+  h3.textContent = "Journal des connexions";
+  journal.appendChild(h3);
+
+  const entries = connLog.slice().reverse().slice(0, 25);
+  if(entries.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "journal-empty";
+    empty.textContent = "Aucune connexion enregistrée pour l'instant.";
+    journal.appendChild(empty);
+  } else {
+    entries.forEach(e => {
+      const row = document.createElement("div");
+      row.className = "journal-entry";
+      const left = document.createElement("span");
+      left.innerHTML = `<strong>${e.name}</strong> — ${e.role === "direction" ? "Direction" : "Agent"}`;
+      const right = document.createElement("span");
+      right.textContent = formatDateTime(e.at);
+      row.appendChild(left);
+      row.appendChild(right);
+      journal.appendChild(row);
+    });
+  }
+  return journal;
+}
+
+function renderDirectionView(){
+  mainContentEl.innerHTML = "";
+
+  const banner = renderAlertBanner();
+  if(banner) mainContentEl.appendChild(banner);
+
+  mainContentEl.appendChild(renderStockPanel());
+  mainContentEl.appendChild(renderConsumptionCharts());
+
+  // Détail par bloc, regroupé par niveau — pas d'onglet, tout défile sur une page
+  let lastLevel = null;
+  flatBlocs().forEach(({level, zone, bloc}) => {
+    if(level !== lastLevel){
+      const heading = document.createElement("div");
+      heading.className = "level-heading";
+      heading.textContent = level;
+      mainContentEl.appendChild(heading);
+      lastLevel = level;
+    }
+
+    const section = document.createElement("div");
+    section.className = "bloc";
+    const header = document.createElement("div");
+    header.className = "bloc-header";
+    const name = document.createElement("div");
+    name.className = "bloc-name";
+    name.innerHTML = `<span class="bloc-zone-dot zone-${zone}"></span>${bloc.name}`;
+    const config = document.createElement("div");
+    config.className = "bloc-config";
+    config.textContent = bloc.wc + " WC";
+    header.appendChild(name);
+    header.appendChild(config);
+    section.appendChild(header);
+
+    const panel = document.createElement("div");
+    panel.className = "item";
+    ["papier","essuie","savon"].forEach(type => {
+      const cfg = TYPE_CONFIG[type];
+      const t = totalsFor(level, zone, bloc.id, type);
+      const row = document.createElement("div");
+      row.className = "stat-row";
+      const left = document.createElement("div");
+      left.className = "stat-name";
+      left.innerHTML = `${cfg.label}<div class="stat-sub">${t.count} réassort${t.count>1?"s":""}${t.last ? " · dernier " + formatDateTime(t.last.at) + " (" + t.last.agent + ")" : ""}</div>`;
+      const right = document.createElement("div");
+      right.className = "stat-total";
+      right.innerHTML = `${t.total} <span class="stat-unit">${cfg.unit}</span>`;
+      row.appendChild(left);
+      row.appendChild(right);
+      panel.appendChild(row);
+    });
+    section.appendChild(panel);
+    mainContentEl.appendChild(section);
+  });
+
+  // Journal global des réassorts, tous niveaux et zones confondus
+  const journal = document.createElement("div");
+  journal.className = "journal";
+  const h3 = document.createElement("h3");
+  h3.textContent = "Derniers réassorts — tout le chantier";
+  journal.appendChild(h3);
+
+  const entries = log.slice().reverse().slice(0, 20);
+  if(entries.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "journal-empty";
+    empty.textContent = "Aucun réassort noté pour l'instant.";
+    journal.appendChild(empty);
+  } else {
+    entries.forEach(e => {
+      const cfg = TYPE_CONFIG[e.type];
+      const row = document.createElement("div");
+      row.className = "journal-entry";
+      const left = document.createElement("span");
+      left.innerHTML = `<strong>${e.blocName}</strong> (${e.level}, ${e.zone === "SUD" ? "Sud" : "Nord"}) — ${cfg.label} : ${e.qty} ${cfg.unit}`;
+      const right = document.createElement("span");
+      right.textContent = formatDateTime(e.at) + " · " + e.agent;
+      row.appendChild(left);
+      row.appendChild(right);
+      journal.appendChild(row);
+    });
+  }
+  mainContentEl.appendChild(journal);
+
+  mainContentEl.appendChild(renderConnexionsPanel());
+  mainContentEl.appendChild(renderAccessPanel());
+}
+
+// ---------- Render principal ----------
+
+const headerEl = document.getElementById("appHeader");
+
+function render(){
+  if(appState !== "app"){
+    document.body.removeAttribute("data-zone");
+    headerEl.className = "header-login";
+    renderLoginScreen();
+    return;
+  }
+  renderHeaderAuth();
+
+  if(mode === "agent"){
+    document.body.setAttribute("data-zone", currentZone);
+    headerEl.className = "header-agent";
+    mainContentEl.className = "view-agent";
+    renderLevelNav();
+    renderZoneNav();
+    renderAgentView();
+  } else {
+    document.body.removeAttribute("data-zone");
+    headerEl.className = "header-direction";
+    mainContentEl.className = "view-direction";
+    levelNavEl.innerHTML = "";
+    zoneNavEl.innerHTML = "";
+    renderDirectionView();
+  }
+}
+
+async function init(){
+  await loadPeople();
+  await loadConnLog();
+  await loadLog();
+  await loadStock();
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
