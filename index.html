@@ -710,6 +710,7 @@ function logout(){
   currentPerson = null;
   appState = "login";
   mode = "agent";
+  lastAction = null;
   render();
 }
 
@@ -897,7 +898,7 @@ function renderLevelNav(){
     const btn = document.createElement("button");
     btn.textContent = level;
     if(level === currentLevel) btn.classList.add("active");
-    btn.addEventListener("click", () => { currentLevel = level; render(); });
+    btn.addEventListener("click", () => { currentLevel = level; lastAction = null; render(); });
     levelNavEl.appendChild(btn);
   });
 }
@@ -918,7 +919,7 @@ function renderZoneNav(){
     const btn = document.createElement("button");
     btn.textContent = "Partie " + zone.charAt(0) + zone.slice(1).toLowerCase();
     if(zone === currentZone) btn.classList.add("active");
-    btn.addEventListener("click", () => { currentZone = zone; render(); });
+    btn.addEventListener("click", () => { currentZone = zone; lastAction = null; render(); });
     zoneNavEl.appendChild(btn);
   });
 }
@@ -1067,7 +1068,17 @@ function renderAgentItemCard(bloc, type, unit, totalUnits){
     chip.className = "chip" + (isJust ? " just-set" : "");
     chip.textContent = v;
     chip.addEventListener("click", async () => {
-      await addReassort(currentLevel, currentZone, bloc, type, v, unit);
+      const sameAsLast = lastAction
+        && lastAction.level === currentLevel && lastAction.zone === currentZone
+        && lastAction.blocId === bloc.id && lastAction.type === type && lastAction.unit === unit;
+
+      if(sameAsLast){
+        // Clic successif sur le même consommable : on corrige la saisie précédente
+        // au lieu d'en ajouter une nouvelle (sinon les quantités s'additionnent à tort).
+        await editLastEntry(currentLevel, currentZone, bloc, type, unit, v);
+      } else {
+        await addReassort(currentLevel, currentZone, bloc, type, v, unit);
+      }
       lastAction = { level: currentLevel, zone: currentZone, blocId: bloc.id, type, unit, value: v };
       render();
     });
