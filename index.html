@@ -263,6 +263,30 @@
   .chip:active{ background:var(--zone-accent); border-color:var(--zone-accent); color:#fff; }
   .chip-label{ font-size:11px; color:var(--ink-soft); margin-top:6px; }
 
+  @keyframes chipHighlight{
+    0%{ background:var(--zone-accent); border-color:var(--zone-accent); color:#fff; transform:scale(1.06); }
+    75%{ background:var(--zone-accent); border-color:var(--zone-accent); color:#fff; transform:scale(1); }
+    100%{ background:#fff; border-color:var(--line); color:var(--ink-soft); transform:scale(1); }
+  }
+  .chip.just-set{ animation: chipHighlight 2s ease forwards; }
+  .chip.selected-current{ border-color:var(--zone-accent); border-width:2px; color:var(--zone-accent-deep); font-weight:800; }
+
+  .chip-bottom-row{
+    display:flex; justify-content:space-between; align-items:center; margin-top:6px;
+  }
+  .edit-link-btn{
+    background:none; border:none; color:var(--zone-accent-deep); font-size:11.5px;
+    text-decoration:underline; cursor:pointer; padding:0; font-weight:650;
+  }
+  .edit-cancel-btn{
+    background:none; border:none; color:var(--ink-soft); font-size:11.5px;
+    text-decoration:underline; cursor:pointer; padding:0; margin-top:8px;
+  }
+
+  .zone-locked-badge{
+    font-size:12.5px; color:var(--ink-soft); font-weight:600;
+  }
+
   #mainContent.view-agent .item{ border-left:4px solid var(--zone-accent); }
   #mainContent.view-agent .chip-label{ color:var(--zone-accent-deep); }
 
@@ -334,6 +358,8 @@
   }
   .role-agent{ background:var(--neutral-bg); color:var(--ink-soft); }
   .role-direction{ background:var(--ok-bg); color:var(--ok); }
+  .zone-badge-SUD{ background:var(--rose-bg); color:var(--rose-deep); }
+  .zone-badge-NORD{ background:var(--green-bg); color:var(--green-deep); }
   .access-row .code{ color:var(--ink-soft); font-family:monospace; font-size:12px; }
   .access-row .del-btn{
     background:none; border:none; color:#B7ABA6; font-size:12px; cursor:pointer;
@@ -347,6 +373,41 @@
   }
   .access-add button{
     background:var(--teal); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:650; cursor:pointer;
+  }
+
+  .stock-entry-totals{
+    display:flex; flex-wrap:wrap; gap:14px; font-size:12.5px; color:var(--ink-soft);
+    padding:8px 0 14px; border-bottom:1px solid var(--line); margin-bottom:8px;
+  }
+  .stock-entry-totals strong{ color:var(--ink); }
+  .stock-entry-totals .total-general{ margin-left:auto; color:var(--teal-deep); }
+  .stock-entry-totals .total-general strong{ color:var(--teal-deep); }
+
+  .type-list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .type-list-item{
+    text-align:left; background:#fff; border:1px solid var(--line); border-radius:9px;
+    padding:9px 12px; font-size:13px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .type-list-item.selected{
+    background:var(--ok-bg); border-color:var(--ok); color:var(--ok);
+  }
+
+  .collapsible{ margin-bottom:14px; }
+  .collapsible-header{
+    width:100%; display:flex; justify-content:space-between; align-items:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:13px 16px; font-size:14.5px; font-weight:700; color:var(--ink);
+    cursor:pointer; text-align:left;
+  }
+  .collapsible-header .collapsible-chevron{ color:var(--ink-soft); font-size:12px; }
+  .collapsible-content{ margin-top:10px; }
+
+  .maintenance-btn{
+    background:#fff; border:1px solid var(--line); color:var(--ink-soft);
+    border-radius:9px; padding:9px 14px; font-size:12.5px; font-weight:650; cursor:pointer;
+  }
+  .maintenance-btn.armed{
+    background:var(--danger-bg); border-color:#EBC3B8; color:var(--danger);
   }
 
   .footer-note{
@@ -383,6 +444,7 @@
 <script>
 const LOG_KEY = "pichaury-reassort-log";
 const STOCK_KEY = "pichaury-stock-global";
+const STOCK_ENTRIES_KEY = "pichaury-stock-entries";
 const PEOPLE_KEY = "pichaury-people";
 const CONN_LOG_KEY = "pichaury-connexions-log";
 
@@ -391,14 +453,24 @@ const ZONES = ["SUD", "NORD"];
 const MAX_LOG_ENTRIES = 1000;
 const MAX_CONN_ENTRIES = 500;
 const CONSO_WINDOW_DAYS = 14;
-const CRITICAL_DAYS = 5;
-const WATCH_DAYS = 10;
+const CRITICAL_DAYS = 14; // 2 semaines minimum avant rupture estimée -> alerte critique
+const WATCH_DAYS = 21;    // 3 semaines -> à surveiller
 
 const TYPE_CONFIG = {
-  papier: { label: "Papier toilette", unit: "rouleau(x)", stockUnit: "rouleau(x)", values: [1,2,3,4,5] },
-  essuie: { label: "Essuie-mains",    unit: "paquet(s)",  stockUnit: "carton(s)",  values: [1,2,3] },
+  papier: { label: "Papier toilette", unit: "rouleau(x)", stockUnit: "ballot(s)", fixedRatio: 6, values: [0,1,2,3,4,5] },
+  essuie: { label: "Essuie-mains",    unit: "paquet(s)",  stockUnit: "carton(s)",  values: [0,1,2,3] },
   savon:  { label: "Savon mains",     unit: "cartouche",  stockUnit: "cartouche",  values: [0,1] },
 };
+
+// Nombre d'unités de réassort contenues dans une unité de stock.
+// Papier : ratio fixe connu (1 ballot = 6 rouleaux).
+// Essuie-mains : ratio inconnu au départ, renseigné par Pierre (stock.essuie.ratio).
+// Savon : stock et réassort dans la même unité (cartouche), ratio = 1.
+function getRatio(type){
+  if(type === "papier") return TYPE_CONFIG.papier.fixedRatio;
+  if(type === "essuie") return stock.essuie.ratio || null;
+  return 1;
+}
 
 // Config réelle du bâtiment, communiquée par Pierre le 09/09/2026.
 function buildBuilding(){
@@ -422,6 +494,7 @@ function buildBuilding(){
       "NORD": [
         bloc("Bloc Nord 1", 5, 1, 1),
         bloc("Bloc Nord 2", 5, 1, 1),
+        bloc("Cuisine",     0, 1, 1),
       ],
     },
   };
@@ -455,6 +528,11 @@ let people = [];
 let connLog = [];
 let log = [];
 let stock = emptyStock();
+let stockEntries = [];
+let lastAction = null;   // { level, zone, blocId, type, unit, value } — pour la surbrillance 2s
+let editingKey = null;   // clé de l'item en cours de correction (agent), ou null
+let selectedStockEntryType = "papier"; // type sélectionné dans la liste du formulaire d'entrée de stock
+let collapseState = {};  // { sectionKey: true/false } — replié par défaut, mémorisé pendant la session
 
 const headerAuthAreaEl = document.getElementById("headerAuthArea");
 const levelNavEl = document.getElementById("levelNav");
@@ -583,6 +661,20 @@ async function saveStock(){
   if(!res) showToast("Erreur d'enregistrement du stock — réessayez");
 }
 
+async function loadStockEntries(){
+  const res = await apiGet(STOCK_ENTRIES_KEY);
+  if(res && res.value){
+    stockEntries = JSON.parse(res.value);
+    return;
+  }
+  stockEntries = [];
+}
+
+async function saveStockEntries(){
+  const res = await storageSetWithRetry(STOCK_ENTRIES_KEY, JSON.stringify(stockEntries), true);
+  if(!res) showToast("Erreur d'enregistrement des entrées de stock — réessayez");
+}
+
 // ---------- Authentification par code personnel ----------
 
 async function attemptLogin(code){
@@ -596,6 +688,9 @@ async function attemptLogin(code){
   currentPerson = person;
   appState = "app";
   mode = "agent";
+  if(person.zone === "SUD" || person.zone === "NORD"){
+    currentZone = person.zone;
+  }
   await logConnexion(person);
   render();
 }
@@ -618,7 +713,7 @@ function logout(){
   render();
 }
 
-async function addPerson(name, code, role){
+async function addPerson(name, code, role, zone){
   name = (name || "").trim();
   code = (code || "").trim();
   if(!name || !code){ showToast("Nom et code requis"); return; }
@@ -626,7 +721,9 @@ async function addPerson(name, code, role){
     showToast("Ce code est déjà utilisé");
     return;
   }
-  people.push({ id: cryptoId(), name, code, role: role === "direction" ? "direction" : "agent" });
+  const finalRole = role === "direction" ? "direction" : "agent";
+  const finalZone = finalRole === "agent" && (zone === "SUD" || zone === "NORD") ? zone : null;
+  people.push({ id: cryptoId(), name, code, role: finalRole, zone: finalZone });
   await savePeople();
   showToast("Accès ajouté pour " + name);
   render();
@@ -653,24 +750,35 @@ async function addReassort(level, zone, bloc, type, qty, unit){
   };
   log.push(entry);
   await saveLog();
-
-  // Le réassort prélève sur le stock global du dépôt, s'il est défini.
-  // Essuie-mains : réassort en paquets, stock en cartons -> on ne déduit
-  // que si le nombre de paquets par carton a été renseigné.
-  if(type === "essuie"){
-    if(stock.essuie.qty !== null && stock.essuie.ratio){
-      stock.essuie.qty = Math.max(0, stock.essuie.qty - qty / stock.essuie.ratio);
-      stock.essuie.updatedAt = nowIso;
-      await saveStock();
-    }
-  } else if(stock[type].qty !== null){
-    stock[type].qty = Math.max(0, stock[type].qty - qty);
-    stock[type].updatedAt = nowIso;
-    await saveStock();
-  }
+  await applyStockDelta(type, -qty, nowIso);
 
   const cfg = TYPE_CONFIG[type];
   showToast(`Réassort noté : ${qty} ${cfg.unit} — ${bloc.name}`);
+  return entry;
+}
+
+// Corrige la dernière saisie d'un agent pour un consommable donné.
+// Répercute l'écart sur le stock (au lieu de simplement retirer l'ancienne
+// valeur puis ajouter la nouvelle, ce qui économise un aller-retour).
+async function editLastEntry(level, zone, bloc, type, unit, newQty){
+  const entry = lastEntryFor(level, zone, bloc.id, type, unit);
+  if(!entry) return;
+  const delta = newQty - entry.qty; // positif si on corrige à la hausse
+  entry.qty = newQty;
+  entry.editedAt = new Date().toISOString();
+  await saveLog();
+  await applyStockDelta(type, -delta, entry.editedAt);
+  showToast("Réassort corrigé");
+}
+
+// Applique une variation de stock (négative = consommation, positive = entrée),
+// exprimée dans l'unité de réassort (cfg.unit), convertie via getRatio().
+async function applyStockDelta(type, deltaInReassortUnit, nowIso){
+  const ratio = getRatio(type);
+  if(stock[type].qty === null || !ratio) return;
+  stock[type].qty = Math.max(0, stock[type].qty + deltaInReassortUnit / ratio);
+  stock[type].updatedAt = nowIso;
+  await saveStock();
 }
 
 async function updateStock(type, value){
@@ -710,11 +818,11 @@ function stockStatus(type){
 
   if(s.qty === null) return { tag: "neutral", label: "Stock non renseigné", rate: rawRate, daysLeft: null };
 
-  if(type === "essuie" && !s.ratio){
+  const ratio = getRatio(type);
+  if(!ratio){
     return { tag: "neutral", label: "Indiquez paquets/carton", rate: rawRate, daysLeft: null };
   }
 
-  const ratio = type === "essuie" ? s.ratio : 1;
   const rateInStockUnit = rawRate / ratio;
 
   if(s.qty <= 0) return { tag: "critique", label: "Stock épuisé", rate: rawRate, daysLeft: 0 };
@@ -732,6 +840,55 @@ function tagClass(tag){
   return "tag-neutral";
 }
 
+// ---------- Entrées de stock (achats / livraisons) ----------
+
+async function addStockEntry(type, purchaseDate, deliveryDate, qty, price){
+  if(!qty || qty <= 0){ showToast("Quantité invalide"); return; }
+  const nowIso = new Date().toISOString();
+  const entry = {
+    id: cryptoId(),
+    type, purchaseDate, deliveryDate,
+    qty, price: price || 0,
+    createdBy: currentPerson ? currentPerson.name : "direction",
+    createdAt: nowIso,
+  };
+  stockEntries.push(entry);
+  await saveStockEntries();
+
+  // La quantité saisie ici est déjà dans l'unité de stock (ballots, cartons, cartouches) :
+  // on l'ajoute directement, sans passer par le ratio de réassort.
+  const current = stock[type].qty === null ? 0 : stock[type].qty;
+  stock[type] = Object.assign({}, stock[type], { qty: current + qty, updatedAt: nowIso });
+  await saveStock();
+
+  const cfg = TYPE_CONFIG[type];
+  showToast(`Entrée de stock ajoutée : +${qty} ${cfg.stockUnit}`);
+  render();
+}
+
+// ---------- Réinitialisation (données de test) ----------
+
+async function resetReassortLog(){
+  log = [];
+  await saveLog();
+  showToast("Journal des réassorts vidé");
+  render();
+}
+
+async function resetStockEntries(){
+  stockEntries = [];
+  await saveStockEntries();
+  showToast("Historique des entrées de stock vidé");
+  render();
+}
+
+async function resetStockQuantities(){
+  stock = emptyStock();
+  await saveStock();
+  showToast("Stocks remis à vide");
+  render();
+}
+
 // ---------- Navigation ----------
 
 function renderLevelNav(){
@@ -747,6 +904,16 @@ function renderLevelNav(){
 
 function renderZoneNav(){
   zoneNavEl.innerHTML = "";
+
+  const locked = currentPerson && currentPerson.role === "agent" && currentPerson.zone;
+  if(locked){
+    const badge = document.createElement("div");
+    badge.className = "zone-locked-badge";
+    badge.innerHTML = `🔒 Vous êtes assigné à la partie ${currentZone === "SUD" ? "Sud" : "Nord"}`;
+    zoneNavEl.appendChild(badge);
+    return;
+  }
+
   ZONES.forEach(zone => {
     const btn = document.createElement("button");
     btn.textContent = "Partie " + zone.charAt(0) + zone.slice(1).toLowerCase();
@@ -824,12 +991,18 @@ function lastEntryFor(level, zone, blocId, type, unit){
   return null;
 }
 
+function itemKey(level, zone, blocId, type, unit){
+  return [level, zone, blocId, type, unit].join("|");
+}
+
 const DIST_FIELD = { papier: "wc", essuie: "essuie", savon: "savon" };
 
 function renderAgentItemCard(bloc, type, unit, totalUnits){
   const cfg = TYPE_CONFIG[type];
   const dist = bloc[DIST_FIELD[type]];
   const last = lastEntryFor(currentLevel, currentZone, bloc.id, type, unit);
+  const key = itemKey(currentLevel, currentZone, bloc.id, type, unit);
+  const isEditing = editingKey === key;
 
   const card = document.createElement("div");
   card.className = "item";
@@ -846,31 +1019,76 @@ function renderAgentItemCard(bloc, type, unit, totalUnits){
     ? "distributeur " + unit + " sur " + totalUnits
     : dist + " distributeur" + (dist > 1 ? "s" : "");
   meta.textContent = last
-    ? distLabel + " · dernier réassort " + formatDateTime(last.at) + " (" + last.qty + " " + cfg.unit + ", " + last.agent + ")"
+    ? distLabel + " · dernier réassort " + formatDateTime(last.at) + " (" + last.qty + " " + cfg.unit + ", " + last.agent + ")" + (last.editedAt ? " · corrigé" : "")
     : distLabel + " · pas encore de réassort noté";
   nameBlock.appendChild(name);
   nameBlock.appendChild(meta);
   top.appendChild(nameBlock);
   card.appendChild(top);
 
+  if(isEditing){
+    const editLabel = document.createElement("div");
+    editLabel.className = "chip-label";
+    editLabel.textContent = "Corriger la dernière saisie (" + cfg.unit + ")";
+    card.appendChild(editLabel);
+
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    cfg.values.forEach(v => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (last && last.qty === v ? " selected-current" : "");
+      chip.textContent = v;
+      chip.addEventListener("click", async () => {
+        editingKey = null;
+        await editLastEntry(currentLevel, currentZone, bloc, type, unit, v);
+        render();
+      });
+      chips.appendChild(chip);
+    });
+    card.appendChild(chips);
+
+    const cancel = document.createElement("button");
+    cancel.className = "edit-cancel-btn";
+    cancel.textContent = "Annuler la correction";
+    cancel.addEventListener("click", () => { editingKey = null; render(); });
+    card.appendChild(cancel);
+
+    return card;
+  }
+
   const chips = document.createElement("div");
   chips.className = "chips";
   cfg.values.forEach(v => {
     const chip = document.createElement("button");
-    chip.className = "chip";
+    const isJust = lastAction
+      && lastAction.level === currentLevel && lastAction.zone === currentZone
+      && lastAction.blocId === bloc.id && lastAction.type === type
+      && lastAction.unit === unit && lastAction.value === v;
+    chip.className = "chip" + (isJust ? " just-set" : "");
     chip.textContent = v;
     chip.addEventListener("click", async () => {
       await addReassort(currentLevel, currentZone, bloc, type, v, unit);
+      lastAction = { level: currentLevel, zone: currentZone, blocId: bloc.id, type, unit, value: v };
       render();
     });
     chips.appendChild(chip);
   });
   card.appendChild(chips);
 
-  const label = document.createElement("div");
+  const bottomRow = document.createElement("div");
+  bottomRow.className = "chip-bottom-row";
+  const label = document.createElement("span");
   label.className = "chip-label";
   label.textContent = "Quantité remise (" + cfg.unit + ")";
-  card.appendChild(label);
+  bottomRow.appendChild(label);
+  if(last){
+    const editLink = document.createElement("button");
+    editLink.className = "edit-link-btn";
+    editLink.textContent = "Modifier";
+    editLink.addEventListener("click", () => { editingKey = key; render(); });
+    bottomRow.appendChild(editLink);
+  }
+  card.appendChild(bottomRow);
 
   return card;
 }
@@ -900,12 +1118,14 @@ function renderAgentView(){
     name.textContent = bloc.name;
     const config = document.createElement("div");
     config.className = "bloc-config";
-    config.textContent = bloc.wc + " WC";
+    config.textContent = bloc.wc > 0 ? bloc.wc + " WC" : "";
     header.appendChild(name);
     header.appendChild(config);
     section.appendChild(header);
 
-    section.appendChild(renderAgentItemCard(bloc, "papier", 1, 1));
+    if(bloc.wc > 0){
+      section.appendChild(renderAgentItemCard(bloc, "papier", 1, 1));
+    }
     renderAgentTypeCards(bloc, "essuie").forEach(c => section.appendChild(c));
     renderAgentTypeCards(bloc, "savon").forEach(c => section.appendChild(c));
 
@@ -947,6 +1167,37 @@ function blocAvgDaily(level, zone, blocId, type){
   return total / CONSO_WINDOW_DAYS;
 }
 
+// ---------- Coût lié à la consommation ----------
+
+// Prix moyen payé, par unité de stock (carton/ballot/cartouche), déduit des entrées de stock.
+function avgUnitPriceStock(type){
+  const entries = stockEntries.filter(e => e.type === type && e.price > 0 && e.qty > 0);
+  const totalQty = entries.reduce((s, e) => s + e.qty, 0);
+  const totalPrice = entries.reduce((s, e) => s + e.price, 0);
+  if(totalQty <= 0) return null;
+  return totalPrice / totalQty;
+}
+
+// Quantité totale consommée depuis le début (unité de réassort).
+function totalConsumedAllTime(type){
+  return log.filter(e => e.type === type).reduce((s, e) => s + e.qty, 0);
+}
+
+// Résumé coût pour un consommable : prix unitaire, valeur déjà consommée, projection mensuelle.
+function costSummary(type){
+  const unitPriceStock = avgUnitPriceStock(type);
+  const ratio = getRatio(type);
+  if(unitPriceStock === null || !ratio){
+    return { known: false };
+  }
+  const unitPriceReassort = unitPriceStock / ratio;
+  const consumedQty = totalConsumedAllTime(type);
+  const consumedValue = unitPriceReassort * consumedQty;
+  const monthlyQty = consumptionRate(type) * 30;
+  const monthlyValue = unitPriceReassort * monthlyQty;
+  return { known: true, unitPriceStock, unitPriceReassort, consumedValue, monthlyValue };
+}
+
 function renderAlertBanner(){
   const critiques = Object.keys(TYPE_CONFIG)
     .map(type => ({ type, status: stockStatus(type) }))
@@ -965,10 +1216,12 @@ function renderConsumptionCharts(){
 
   Object.keys(TYPE_CONFIG).forEach(type => {
     const cfg = TYPE_CONFIG[type];
-    const rows = blocs.map(({level, zone, bloc}) => ({
-      level, zone, bloc,
-      value: blocAvgDaily(level, zone, bloc.id, type),
-    }));
+    const rows = blocs
+      .filter(({bloc}) => type !== "papier" || bloc.wc > 0)
+      .map(({level, zone, bloc}) => ({
+        level, zone, bloc,
+        value: blocAvgDaily(level, zone, bloc.id, type),
+      }));
     const max = Math.max(0.0001, ...rows.map(r => r.value));
 
     const section = document.createElement("div");
@@ -1021,9 +1274,6 @@ function renderConsumptionCharts(){
 function renderStockPanel(){
   const panel = document.createElement("div");
   panel.className = "stock-panel";
-  const h3 = document.createElement("h3");
-  h3.textContent = "Stock global au dépôt";
-  panel.appendChild(h3);
 
   Object.keys(TYPE_CONFIG).forEach(type => {
     const cfg = TYPE_CONFIG[type];
@@ -1097,18 +1347,193 @@ function renderStockPanel(){
   return panel;
 }
 
+function renderStockEntriesPanel(){
+  const panel = document.createElement("div");
+  panel.className = "access-panel";
+
+  // Total dépensé par type + total général
+  const totals = {};
+  let grandTotal = 0;
+  Object.keys(TYPE_CONFIG).forEach(t => totals[t] = 0);
+  stockEntries.forEach(e => { totals[e.type] = (totals[e.type] || 0) + (e.price || 0); grandTotal += (e.price || 0); });
+
+  const totalsRow = document.createElement("div");
+  totalsRow.className = "stock-entry-totals";
+  totalsRow.innerHTML = Object.keys(TYPE_CONFIG).map(t =>
+    `<span>${TYPE_CONFIG[t].label} : <strong>${totals[t].toFixed(2)} €</strong></span>`
+  ).join("") + `<span class="total-general">Total : <strong>${grandTotal.toFixed(2)} €</strong></span>`;
+  panel.appendChild(totalsRow);
+
+  // Liste des entrées récentes
+  const entries = stockEntries.slice().reverse().slice(0, 15);
+  if(entries.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "journal-empty";
+    empty.textContent = "Aucune entrée de stock enregistrée pour l'instant.";
+    panel.appendChild(empty);
+  } else {
+    entries.forEach(e => {
+      const cfg = TYPE_CONFIG[e.type];
+      const row = document.createElement("div");
+      row.className = "access-row";
+      row.innerHTML = `
+        <div>
+          <span class="who">${cfg.label}</span> — ${e.qty} ${cfg.stockUnit}
+          <div class="stat-sub">Achat ${e.purchaseDate || "—"} · Livraison ${e.deliveryDate || "—"} · ${e.createdBy}</div>
+        </div>
+        <div class="code">${(e.price || 0).toFixed(2)} €</div>
+      `;
+      panel.appendChild(row);
+    });
+  }
+
+  // Formulaire d'ajout
+  const typeList = document.createElement("div");
+  typeList.className = "type-list";
+  Object.keys(TYPE_CONFIG).forEach(t => {
+    const cfg = TYPE_CONFIG[t];
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "type-list-item" + (selectedStockEntryType === t ? " selected" : "");
+    item.textContent = `${cfg.label} (${cfg.stockUnit})`;
+    item.addEventListener("click", () => { selectedStockEntryType = t; render(); });
+    typeList.appendChild(item);
+  });
+  panel.appendChild(typeList);
+
+  const addRow = document.createElement("div");
+  addRow.className = "access-add";
+  addRow.innerHTML = `
+    <input type="date" id="stockEntryPurchaseDate" title="Date d'achat" />
+    <input type="date" id="stockEntryDeliveryDate" title="Date de livraison" />
+    <input type="number" min="0" step="0.01" id="stockEntryQty" placeholder="Quantité" style="max-width:90px;" />
+    <input type="number" min="0" step="0.01" id="stockEntryPrice" placeholder="Prix (€)" style="max-width:90px;" />
+    <button id="stockEntryAdd">Ajouter</button>
+  `;
+  panel.appendChild(addRow);
+
+  panel.querySelector("#stockEntryAdd").addEventListener("click", () => {
+    const type = selectedStockEntryType;
+    const purchaseDate = panel.querySelector("#stockEntryPurchaseDate").value;
+    const deliveryDate = panel.querySelector("#stockEntryDeliveryDate").value;
+    const qty = parseFloat(panel.querySelector("#stockEntryQty").value);
+    const price = parseFloat(panel.querySelector("#stockEntryPrice").value);
+    addStockEntry(type, purchaseDate, deliveryDate, qty, isNaN(price) ? 0 : price);
+  });
+
+  return panel;
+}
+
+function renderCostPanel(){
+  const panel = document.createElement("div");
+  panel.className = "access-panel";
+
+  let grandConsumedValue = 0;
+  let grandMonthlyValue = 0;
+  let anyKnown = false;
+  let anyUnknown = false;
+
+  Object.keys(TYPE_CONFIG).forEach(type => {
+    const cfg = TYPE_CONFIG[type];
+    const cost = costSummary(type);
+    const row = document.createElement("div");
+    row.className = "stat-row";
+    const left = document.createElement("div");
+    left.className = "stat-name";
+
+    if(!cost.known){
+      anyUnknown = true;
+      left.innerHTML = `${cfg.label}<div class="stat-sub">Prix non renseigné — ajoutez une entrée de stock avec un prix</div>`;
+      row.appendChild(left);
+      panel.appendChild(row);
+      return;
+    }
+
+    anyKnown = true;
+    grandConsumedValue += cost.consumedValue;
+    grandMonthlyValue += cost.monthlyValue;
+
+    left.innerHTML = `${cfg.label}<div class="stat-sub">${cost.unitPriceStock.toFixed(2)} €/${cfg.stockUnit} · ${cost.unitPriceReassort.toFixed(2)} €/${cfg.unit}</div>`;
+    const right = document.createElement("div");
+    right.className = "stat-total";
+    right.innerHTML = `${cost.consumedValue.toFixed(2)} € <span class="stat-unit">consommés</span>`;
+    row.appendChild(left);
+    row.appendChild(right);
+    panel.appendChild(row);
+
+    const sub = document.createElement("div");
+    sub.className = "stock-detail";
+    sub.innerHTML = `<span>Projection : ~${cost.monthlyValue.toFixed(2)} €/mois au rythme actuel</span>`;
+    panel.appendChild(sub);
+  });
+
+  if(anyKnown){
+    const totalRow = document.createElement("div");
+    totalRow.className = "stock-entry-totals";
+    totalRow.style.marginTop = "8px";
+    totalRow.innerHTML = `<span class="total-general">Total consommé : <strong>${grandConsumedValue.toFixed(2)} €</strong> · ~${grandMonthlyValue.toFixed(2)} €/mois${anyUnknown ? " (partiel, prix manquant sur au moins un consommable)" : ""}</span>`;
+    panel.appendChild(totalRow);
+  } else {
+    const empty = document.createElement("div");
+    empty.className = "journal-empty";
+    empty.textContent = "Ajoutez au moins une entrée de stock avec un prix pour voir le coût de la consommation.";
+    panel.appendChild(empty);
+  }
+
+  return panel;
+}
+
+function renderConfirmButton(label, confirmLabel, onConfirm){
+  const btn = document.createElement("button");
+  btn.className = "maintenance-btn";
+  btn.textContent = label;
+  let armed = false;
+  let timer = null;
+  btn.addEventListener("click", () => {
+    if(!armed){
+      armed = true;
+      btn.textContent = confirmLabel;
+      btn.classList.add("armed");
+      timer = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove("armed"); }, 4000);
+    } else {
+      clearTimeout(timer);
+      onConfirm();
+    }
+  });
+  return btn;
+}
+
+function renderMaintenancePanel(){
+  const panel = document.createElement("div");
+  panel.className = "access-panel";
+  const note = document.createElement("div");
+  note.className = "stat-sub";
+  note.style.marginBottom = "10px";
+  note.textContent = "À utiliser pour effacer des données de test. Cliquez une première fois pour armer, une seconde fois pour confirmer.";
+  panel.appendChild(note);
+
+  const row = document.createElement("div");
+  row.style.display = "flex";
+  row.style.flexWrap = "wrap";
+  row.style.gap = "8px";
+  row.appendChild(renderConfirmButton("Vider le journal des réassorts", "Confirmer ?", resetReassortLog));
+  row.appendChild(renderConfirmButton("Vider les entrées de stock", "Confirmer ?", resetStockEntries));
+  row.appendChild(renderConfirmButton("Remettre les stocks à vide", "Confirmer ?", resetStockQuantities));
+  panel.appendChild(row);
+
+  return panel;
+}
+
 function renderAccessPanel(){
   const panel = document.createElement("div");
   panel.className = "access-panel";
-  const h3 = document.createElement("h3");
-  h3.textContent = "Gérer les accès";
-  panel.appendChild(h3);
 
   people.forEach(p => {
     const row = document.createElement("div");
     row.className = "access-row";
     const left = document.createElement("div");
-    left.innerHTML = `<span class="who">${p.name}</span><span class="role-badge ${p.role === "direction" ? "role-direction" : "role-agent"}">${p.role === "direction" ? "Direction" : "Agent"}</span>`;
+    const zoneBadge = p.zone ? `<span class="role-badge zone-badge-${p.zone}">${p.zone === "SUD" ? "Sud" : "Nord"}</span>` : "";
+    left.innerHTML = `<span class="who">${p.name}</span><span class="role-badge ${p.role === "direction" ? "role-direction" : "role-agent"}">${p.role === "direction" ? "Direction" : "Agent"}</span>${zoneBadge}`;
     const right = document.createElement("div");
     right.style.display = "flex";
     right.style.alignItems = "center";
@@ -1136,15 +1561,29 @@ function renderAccessPanel(){
       <option value="agent">Agent</option>
       <option value="direction">Direction</option>
     </select>
+    <select id="newPersonZone">
+      <option value="">Aucune restriction</option>
+      <option value="SUD">Verrouillé Sud</option>
+      <option value="NORD">Verrouillé Nord</option>
+    </select>
     <button id="newPersonAdd">Ajouter</button>
   `;
   panel.appendChild(addRow);
 
+  const roleSelect = panel.querySelector("#newPersonRole");
+  const zoneSelect = panel.querySelector("#newPersonZone");
+  const syncZoneVisibility = () => {
+    zoneSelect.style.display = roleSelect.value === "agent" ? "" : "none";
+  };
+  roleSelect.addEventListener("change", syncZoneVisibility);
+  syncZoneVisibility();
+
   panel.querySelector("#newPersonAdd").addEventListener("click", () => {
     const name = panel.querySelector("#newPersonName").value;
     const code = panel.querySelector("#newPersonCode").value;
-    const role = panel.querySelector("#newPersonRole").value;
-    addPerson(name, code, role);
+    const role = roleSelect.value;
+    const zone = zoneSelect.value;
+    addPerson(name, code, role, zone);
   });
 
   return panel;
@@ -1153,9 +1592,6 @@ function renderAccessPanel(){
 function renderConnexionsPanel(){
   const journal = document.createElement("div");
   journal.className = "journal";
-  const h3 = document.createElement("h3");
-  h3.textContent = "Journal des connexions";
-  journal.appendChild(h3);
 
   const entries = connLog.slice().reverse().slice(0, 25);
   if(entries.length === 0){
@@ -1179,23 +1615,42 @@ function renderConnexionsPanel(){
   return journal;
 }
 
-function renderDirectionView(){
-  mainContentEl.innerHTML = "";
+function collapsibleSection(key, title, buildContentFn, defaultOpen){
+  if(!(key in collapseState)) collapseState[key] = !!defaultOpen;
+  const isOpen = collapseState[key];
 
-  const banner = renderAlertBanner();
-  if(banner) mainContentEl.appendChild(banner);
+  const wrapper = document.createElement("div");
+  wrapper.className = "collapsible";
 
-  mainContentEl.appendChild(renderStockPanel());
-  mainContentEl.appendChild(renderConsumptionCharts());
+  const header = document.createElement("button");
+  header.type = "button";
+  header.className = "collapsible-header";
+  header.innerHTML = `<span>${title}</span><span class="collapsible-chevron">${isOpen ? "▾" : "▸"}</span>`;
+  header.addEventListener("click", () => {
+    collapseState[key] = !collapseState[key];
+    render();
+  });
+  wrapper.appendChild(header);
 
-  // Détail par bloc, regroupé par niveau — pas d'onglet, tout défile sur une page
+  if(isOpen){
+    const content = document.createElement("div");
+    content.className = "collapsible-content";
+    content.appendChild(buildContentFn());
+    wrapper.appendChild(content);
+  }
+
+  return wrapper;
+}
+
+function buildBlocDetailSection(){
+  const wrap = document.createElement("div");
   let lastLevel = null;
   flatBlocs().forEach(({level, zone, bloc}) => {
     if(level !== lastLevel){
       const heading = document.createElement("div");
       heading.className = "level-heading";
       heading.textContent = level;
-      mainContentEl.appendChild(heading);
+      wrap.appendChild(heading);
       lastLevel = level;
     }
 
@@ -1215,7 +1670,7 @@ function renderDirectionView(){
 
     const panel = document.createElement("div");
     panel.className = "item";
-    ["papier","essuie","savon"].forEach(type => {
+    (bloc.wc > 0 ? ["papier","essuie","savon"] : ["essuie","savon"]).forEach(type => {
       const cfg = TYPE_CONFIG[type];
       const t = totalsFor(level, zone, bloc.id, type);
       const row = document.createElement("div");
@@ -1231,15 +1686,14 @@ function renderDirectionView(){
       panel.appendChild(row);
     });
     section.appendChild(panel);
-    mainContentEl.appendChild(section);
+    wrap.appendChild(section);
   });
+  return wrap;
+}
 
-  // Journal global des réassorts, tous niveaux et zones confondus
+function buildReassortJournalSection(){
   const journal = document.createElement("div");
   journal.className = "journal";
-  const h3 = document.createElement("h3");
-  h3.textContent = "Derniers réassorts — tout le chantier";
-  journal.appendChild(h3);
 
   const entries = log.slice().reverse().slice(0, 20);
   if(entries.length === 0){
@@ -1261,10 +1715,24 @@ function renderDirectionView(){
       journal.appendChild(row);
     });
   }
-  mainContentEl.appendChild(journal);
+  return journal;
+}
 
-  mainContentEl.appendChild(renderConnexionsPanel());
-  mainContentEl.appendChild(renderAccessPanel());
+function renderDirectionView(){
+  mainContentEl.innerHTML = "";
+
+  const banner = renderAlertBanner();
+  if(banner) mainContentEl.appendChild(banner);
+
+  mainContentEl.appendChild(collapsibleSection("stock", "Stock global au dépôt", renderStockPanel, false));
+  mainContentEl.appendChild(collapsibleSection("entries", "Entrées de stock (achats & livraisons)", renderStockEntriesPanel, false));
+  mainContentEl.appendChild(collapsibleSection("cost", "Coût de la consommation", renderCostPanel, false));
+  mainContentEl.appendChild(collapsibleSection("charts", "Consommation moyenne par emplacement", renderConsumptionCharts, false));
+  mainContentEl.appendChild(collapsibleSection("detail", "Détail par bloc", buildBlocDetailSection, false));
+  mainContentEl.appendChild(collapsibleSection("journal", "Derniers réassorts — tout le chantier", buildReassortJournalSection, false));
+  mainContentEl.appendChild(collapsibleSection("connexions", "Journal des connexions", renderConnexionsPanel, false));
+  mainContentEl.appendChild(collapsibleSection("access", "Gérer les accès", renderAccessPanel, false));
+  mainContentEl.appendChild(collapsibleSection("maintenance", "Maintenance", renderMaintenancePanel, false));
 }
 
 // ---------- Render principal ----------
@@ -1302,6 +1770,7 @@ async function init(){
   await loadConnLog();
   await loadLog();
   await loadStock();
+  await loadStockEntries();
   render();
 }
 
