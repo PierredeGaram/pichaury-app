@@ -225,6 +225,12 @@
   }
   .stock-panel h3{ margin:0 0 10px; font-size:14px; color:var(--teal-deep); font-weight:700; }
   .stock-row{ padding:10px 0; border-bottom:1px solid var(--line); }
+  .stock-zone-row{ padding:6px 0 6px 4px; border-left:2px solid var(--line); margin-bottom:4px; }
+  .stock-zone-label{ font-size:13px; font-weight:600; display:flex; align-items:center; }
+  .stock-total-row{
+    display:flex; justify-content:space-between; margin-top:6px; padding-top:6px;
+    border-top:1px dashed var(--line); font-size:13px; color:var(--teal-deep);
+  }
   .stock-row:last-child{ border-bottom:none; }
   .stock-row-top{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .stock-label{ font-size:13.5px; font-weight:650; }
@@ -308,6 +314,13 @@
   .journal-empty{ text-align:center; color:var(--ink-soft); font-size:13px; padding:20px 10px; }
 
   /* --- Graphiques consommation --- */
+  .window-switch{ display:flex; gap:8px; margin-bottom:14px; }
+  .window-switch button{
+    flex:1; padding:8px 0; border-radius:9px; border:1px solid var(--line);
+    background:#fff; color:var(--ink-soft); font-size:13px; font-weight:650; cursor:pointer;
+  }
+  .window-switch button.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
+
   .chart-section{
     background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
     padding:16px; margin-bottom:14px;
@@ -452,7 +465,7 @@ const LEVELS = ["RDC", "R+1", "R+2"];
 const ZONES = ["SUD", "NORD"];
 const MAX_LOG_ENTRIES = 1000;
 const MAX_CONN_ENTRIES = 500;
-const CONSO_WINDOW_DAYS = 14;
+let consoWindowDays = 14; // fenêtre d'analyse de la consommation, réglable (14 ou 30 jours)
 const CRITICAL_DAYS = 14; // 2 semaines minimum avant rupture estimée -> alerte critique
 const WATCH_DAYS = 21;    // 3 semaines -> à surveiller
 
@@ -479,16 +492,16 @@ function buildBuilding(){
   }
   return {
     "R+2": {
-      "SUD":  [ bloc("Sanitaires Sud",  5, 1, 1) ],
+      "SUD":  [ bloc("Sanitaires Sud",  5, 2, 1) ],
       "NORD": [ bloc("Sanitaires Nord", 5, 1, 1) ],
     },
     "R+1": {
-      "SUD":  [ bloc("Sanitaires Sud",  5, 1, 1) ],
+      "SUD":  [ bloc("Sanitaires Sud",  5, 2, 1) ],
       "NORD": [ bloc("Sanitaires Nord", 5, 1, 1) ],
     },
     "RDC": {
       "SUD": [
-        bloc("WC principaux Sud", 5, 1, 1),
+        bloc("WC principaux Sud", 5, 2, 1),
         bloc("Salle de sport",    2, 2, 2),
       ],
       "NORD": [
@@ -502,12 +515,23 @@ function buildBuilding(){
 const BUILDING = buildBuilding();
 
 function cryptoId(){ return Math.random().toString(36).slice(2, 10); }
+function zoneStockEntry(){
+  return { qty: null, updatedAt: "", updatedBy: "" };
+}
 function emptyStock(){
   return {
-    papier: { qty: null, updatedAt: "", updatedBy: "" },
-    essuie: { qty: null, updatedAt: "", updatedBy: "", ratio: null },
-    savon:  { qty: null, updatedAt: "", updatedBy: "" },
+    papier: { SUD: zoneStockEntry(), NORD: zoneStockEntry() },
+    essuie: { SUD: zoneStockEntry(), NORD: zoneStockEntry(), ratio: null },
+    savon:  { SUD: zoneStockEntry(), NORD: zoneStockEntry() },
   };
+}
+
+// Stock total sur site pour un type = somme Sud + Nord (traite l'inconnu comme 0,
+// sauf si les deux zones sont non renseignées, où le total reste "non renseigné").
+function totalStockQty(type){
+  const s = stock[type];
+  if(s.SUD.qty === null && s.NORD.qty === null) return null;
+  return (s.SUD.qty || 0) + (s.NORD.qty || 0);
 }
 
 // Personnes par défaut — Pierre pourra ajouter les agents depuis la vue direction.
@@ -532,6 +556,7 @@ let stockEntries = [];
 let lastAction = null;   // { level, zone, blocId, type, unit, value } — pour la surbrillance 2s
 let editingKey = null;   // clé de l'item en cours de correction (agent), ou null
 let selectedStockEntryType = "papier"; // type sélectionné dans la liste du formulaire d'entrée de stock
+let selectedStockEntryZone = "SUD";    // zone sélectionnée dans ce même formulaire
 let collapseState = {};  // { sectionKey: true/false } — replié par défaut, mémorisé pendant la session
 
 const headerAuthAreaEl = document.getElementById("headerAuthArea");
@@ -558,17 +583,32 @@ function formatDateTime(iso){
 
 // ---------- Chargement / sauvegarde ----------
 
+// Retourne { ok:true, value } si la lecture a réussi (value peut être null si la clé
+// n'existe vraiment pas encore), ou { ok:false } si la requête a échoué — pour ne
+// jamais confondre "rien n'existe" avec "on n'a pas pu vérifier".
 async function apiGet(key){
   try{
     const res = await fetch(`/.netlify/functions/storage?key=${encodeURIComponent(key)}`);
-    if(!res.ok) return null;
+    if(!res.ok) return { ok: false };
     const data = await res.json();
-    if(data.value === null || data.value === undefined) return null;
-    return { key, value: data.value };
+    return { ok: true, value: (data.value === undefined ? null : data.value) };
   }catch(e){
     console.error("Échec de lecture", key, e);
-    return null;
+    return { ok: false };
   }
+}
+
+async function apiGetWithRetry(key, retries){
+  retries = retries === undefined ? 2 : retries;
+  for(let attempt = 0; attempt <= retries; attempt++){
+    const res = await apiGet(key);
+    if(res.ok) return res;
+    console.error(`Échec lecture ${key} (essai ${attempt + 1}/${retries + 1})`);
+    if(attempt < retries){
+      await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+    }
+  }
+  return { ok: false };
 }
 
 async function apiSet(key, value){
@@ -602,9 +642,17 @@ async function storageSetWithRetry(key, value, shared, retries){
   return null;
 }
 
+// IMPORTANT : on ne réinitialise (et surtout on ne resauvegarde) les valeurs par défaut
+// que lorsqu'on a la CONFIRMATION qu'il n'y a vraiment rien en base — jamais après un
+// simple échec réseau, qui pourrait sinon écraser des données bien réelles.
 async function loadPeople(){
-  const res = await apiGet(PEOPLE_KEY);
-  if(res && res.value){
+  const res = await apiGetWithRetry(PEOPLE_KEY);
+  if(!res.ok){
+    people = [];
+    showToast("Impossible de charger les accès (réseau) — rechargez la page");
+    return;
+  }
+  if(res.value){
     people = JSON.parse(res.value);
     return;
   }
@@ -618,12 +666,13 @@ async function savePeople(){
 }
 
 async function loadConnLog(){
-  const res = await apiGet(CONN_LOG_KEY);
-  if(res && res.value){
-    connLog = JSON.parse(res.value);
+  const res = await apiGetWithRetry(CONN_LOG_KEY);
+  if(!res.ok){
+    connLog = [];
+    showToast("Impossible de charger le journal des connexions (réseau)");
     return;
   }
-  connLog = [];
+  connLog = res.value ? JSON.parse(res.value) : [];
 }
 
 async function saveConnLog(){
@@ -634,9 +683,13 @@ async function saveConnLog(){
 }
 
 async function loadLog(){
-  const res = await apiGet(LOG_KEY);
-  if(res && res.value){ log = JSON.parse(res.value); return; }
-  log = [];
+  const res = await apiGetWithRetry(LOG_KEY);
+  if(!res.ok){
+    log = [];
+    showToast("Impossible de charger le journal des réassorts (réseau)");
+    return;
+  }
+  log = res.value ? JSON.parse(res.value) : [];
 }
 
 async function saveLog(){
@@ -648,9 +701,25 @@ async function saveLog(){
 }
 
 async function loadStock(){
-  const res = await apiGet(STOCK_KEY);
-  if(res && res.value){
-    stock = Object.assign(emptyStock(), JSON.parse(res.value));
+  const res = await apiGetWithRetry(STOCK_KEY);
+  if(!res.ok){
+    stock = emptyStock();
+    showToast("Impossible de charger le stock (réseau)");
+    return;
+  }
+  if(res.value){
+    const parsed = JSON.parse(res.value);
+    const base = emptyStock();
+    Object.keys(base).forEach(type => {
+      const p = parsed[type];
+      if(p && p.SUD && p.NORD){
+        // Format déjà par zone.
+        base[type] = Object.assign(base[type], p);
+      }
+      // Sinon (ancien format à plat, ou absent) : on garde les valeurs vides par défaut,
+      // les anciennes données globales ne peuvent pas être réparties automatiquement entre zones.
+    });
+    stock = base;
     return;
   }
   stock = emptyStock();
@@ -662,12 +731,13 @@ async function saveStock(){
 }
 
 async function loadStockEntries(){
-  const res = await apiGet(STOCK_ENTRIES_KEY);
-  if(res && res.value){
-    stockEntries = JSON.parse(res.value);
+  const res = await apiGetWithRetry(STOCK_ENTRIES_KEY);
+  if(!res.ok){
+    stockEntries = [];
+    showToast("Impossible de charger les entrées de stock (réseau)");
     return;
   }
-  stockEntries = [];
+  stockEntries = res.value ? JSON.parse(res.value) : [];
 }
 
 async function saveStockEntries(){
@@ -676,6 +746,41 @@ async function saveStockEntries(){
 }
 
 // ---------- Authentification par code personnel ----------
+
+const SESSION_KEY = "pichaury-session";
+const AGENT_SESSION_MS = 3 * 60 * 60 * 1000;      // 3h pour les agents
+const DIRECTION_SESSION_MS = 1 * 60 * 60 * 1000;  // 1h pour la direction
+
+function saveSession(person){
+  try{
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ personId: person.id, code: person.code, at: Date.now() }));
+  }catch(e){ /* stockage local indisponible, tant pis */ }
+}
+
+function clearSession(){
+  try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+}
+
+// Tente de reprendre une session déjà ouverte sur cet appareil, sans re-demander le code.
+function tryResumeSession(){
+  let raw;
+  try{ raw = localStorage.getItem(SESSION_KEY); }catch(e){ return false; }
+  if(!raw) return false;
+  let session;
+  try{ session = JSON.parse(raw); }catch(e){ clearSession(); return false; }
+
+  const person = people.find(p => p.id === session.personId && p.code === session.code);
+  if(!person){ clearSession(); return false; }
+
+  const maxAge = person.role === "direction" ? DIRECTION_SESSION_MS : AGENT_SESSION_MS;
+  if(Date.now() - session.at > maxAge){ clearSession(); return false; }
+
+  currentPerson = person;
+  appState = "app";
+  mode = "agent";
+  if(person.zone === "SUD" || person.zone === "NORD") currentZone = person.zone;
+  return true;
+}
 
 async function attemptLogin(code){
   const trimmed = (code || "").trim();
@@ -691,6 +796,7 @@ async function attemptLogin(code){
   if(person.zone === "SUD" || person.zone === "NORD"){
     currentZone = person.zone;
   }
+  saveSession(person);
   await logConnexion(person);
   render();
 }
@@ -711,6 +817,7 @@ function logout(){
   appState = "login";
   mode = "agent";
   lastAction = null;
+  clearSession();
   render();
 }
 
@@ -751,7 +858,7 @@ async function addReassort(level, zone, bloc, type, qty, unit){
   };
   log.push(entry);
   await saveLog();
-  await applyStockDelta(type, -qty, nowIso);
+  await applyStockDelta(type, zone, -qty, nowIso);
 
   const cfg = TYPE_CONFIG[type];
   showToast(`Réassort noté : ${qty} ${cfg.unit} — ${bloc.name}`);
@@ -768,54 +875,64 @@ async function editLastEntry(level, zone, bloc, type, unit, newQty){
   entry.qty = newQty;
   entry.editedAt = new Date().toISOString();
   await saveLog();
-  await applyStockDelta(type, -delta, entry.editedAt);
+  await applyStockDelta(type, zone, -delta, entry.editedAt);
   showToast("Réassort corrigé");
 }
 
 // Applique une variation de stock (négative = consommation, positive = entrée),
-// exprimée dans l'unité de réassort (cfg.unit), convertie via getRatio().
-async function applyStockDelta(type, deltaInReassortUnit, nowIso){
+// pour une zone donnée (SUD/NORD), exprimée dans l'unité de réassort (cfg.unit),
+// convertie via getRatio().
+async function applyStockDelta(type, zone, deltaInReassortUnit, nowIso){
   const ratio = getRatio(type);
-  if(stock[type].qty === null || !ratio) return;
-  stock[type].qty = Math.max(0, stock[type].qty + deltaInReassortUnit / ratio);
-  stock[type].updatedAt = nowIso;
+  const zs = stock[type][zone];
+  if(zs.qty === null || !ratio) return;
+  zs.qty = Math.max(0, zs.qty + deltaInReassortUnit / ratio);
+  zs.updatedAt = nowIso;
   await saveStock();
 }
 
-async function updateStock(type, value){
+async function updateStock(type, zone, value){
   const cfg = TYPE_CONFIG[type];
   const v = parseFloat(value);
   if(isNaN(v) || v < 0) return;
-  stock[type] = Object.assign({}, stock[type], {
+  stock[type][zone] = Object.assign({}, stock[type][zone], {
     qty: v,
     updatedAt: new Date().toISOString(),
     updatedBy: currentPerson ? currentPerson.name : "direction",
   });
   await saveStock();
-  showToast(`Stock ${cfg.label.toLowerCase()} mis à jour : ${v} ${cfg.stockUnit}`);
+  showToast(`Stock ${cfg.label.toLowerCase()} (${zone === "SUD" ? "Sud" : "Nord"}) mis à jour : ${v} ${cfg.stockUnit}`);
   render();
 }
 
 async function updateRatio(value){
   const v = parseInt(value, 10);
   if(isNaN(v) || v <= 0){ showToast("Nombre de paquets par carton invalide"); return; }
-  stock.essuie = Object.assign({}, stock.essuie, { ratio: v });
+  stock.essuie.ratio = v;
   await saveStock();
   showToast(`Conversion enregistrée : ${v} paquets par carton`);
   render();
 }
 
 function consumptionRate(type){
-  const cutoff = Date.now() - CONSO_WINDOW_DAYS * 24 * 3600 * 1000;
+  const cutoff = Date.now() - consoWindowDays * 24 * 3600 * 1000;
   const total = log
     .filter(e => e.type === type && new Date(e.at).getTime() >= cutoff)
     .reduce((sum, e) => sum + e.qty, 0);
-  return total / CONSO_WINDOW_DAYS;
+  return total / consoWindowDays;
 }
 
-function stockStatus(type){
-  const s = stock[type];
-  const rawRate = consumptionRate(type); // exprimé dans l'unité de réassort (cfg.unit)
+function consumptionRateForZone(type, zone){
+  const cutoff = Date.now() - consoWindowDays * 24 * 3600 * 1000;
+  const total = log
+    .filter(e => e.type === type && e.zone === zone && new Date(e.at).getTime() >= cutoff)
+    .reduce((sum, e) => sum + e.qty, 0);
+  return total / consoWindowDays;
+}
+
+function stockStatus(type, zone){
+  const s = stock[type][zone];
+  const rawRate = consumptionRateForZone(type, zone); // exprimé dans l'unité de réassort (cfg.unit)
 
   if(s.qty === null) return { tag: "neutral", label: "Stock non renseigné", rate: rawRate, daysLeft: null };
 
@@ -843,12 +960,12 @@ function tagClass(tag){
 
 // ---------- Entrées de stock (achats / livraisons) ----------
 
-async function addStockEntry(type, purchaseDate, deliveryDate, qty, price){
+async function addStockEntry(type, zone, purchaseDate, deliveryDate, qty, price){
   if(!qty || qty <= 0){ showToast("Quantité invalide"); return; }
   const nowIso = new Date().toISOString();
   const entry = {
     id: cryptoId(),
-    type, purchaseDate, deliveryDate,
+    type, zone, purchaseDate, deliveryDate,
     qty, price: price || 0,
     createdBy: currentPerson ? currentPerson.name : "direction",
     createdAt: nowIso,
@@ -858,12 +975,12 @@ async function addStockEntry(type, purchaseDate, deliveryDate, qty, price){
 
   // La quantité saisie ici est déjà dans l'unité de stock (ballots, cartons, cartouches) :
   // on l'ajoute directement, sans passer par le ratio de réassort.
-  const current = stock[type].qty === null ? 0 : stock[type].qty;
-  stock[type] = Object.assign({}, stock[type], { qty: current + qty, updatedAt: nowIso });
+  const current = stock[type][zone].qty === null ? 0 : stock[type][zone].qty;
+  stock[type][zone] = Object.assign({}, stock[type][zone], { qty: current + qty, updatedAt: nowIso });
   await saveStock();
 
   const cfg = TYPE_CONFIG[type];
-  showToast(`Entrée de stock ajoutée : +${qty} ${cfg.stockUnit}`);
+  showToast(`Entrée de stock ajoutée : +${qty} ${cfg.stockUnit} (${zone === "SUD" ? "Sud" : "Nord"})`);
   render();
 }
 
@@ -1171,11 +1288,11 @@ function flatBlocs(){
 }
 
 function blocAvgDaily(level, zone, blocId, type){
-  const cutoff = Date.now() - CONSO_WINDOW_DAYS * 24 * 3600 * 1000;
+  const cutoff = Date.now() - consoWindowDays * 24 * 3600 * 1000;
   const total = log
     .filter(e => e.level === level && e.zone === zone && e.blocId === blocId && e.type === type && new Date(e.at).getTime() >= cutoff)
     .reduce((s, e) => s + e.qty, 0);
-  return total / CONSO_WINDOW_DAYS;
+  return total / consoWindowDays;
 }
 
 // ---------- Coût lié à la consommation ----------
@@ -1210,19 +1327,37 @@ function costSummary(type){
 }
 
 function renderAlertBanner(){
-  const critiques = Object.keys(TYPE_CONFIG)
-    .map(type => ({ type, status: stockStatus(type) }))
-    .filter(s => s.status.tag === "critique");
+  const critiques = [];
+  Object.keys(TYPE_CONFIG).forEach(type => {
+    ["SUD","NORD"].forEach(zone => {
+      const status = stockStatus(type, zone);
+      if(status.tag === "critique"){
+        critiques.push({ type, zone, status });
+      }
+    });
+  });
   if(critiques.length === 0) return null;
   const banner = document.createElement("div");
   banner.className = "alert-banner";
-  const parts = critiques.map(c => `${TYPE_CONFIG[c.type].label} (${c.status.label.toLowerCase()})`);
+  const parts = critiques.map(c => `${TYPE_CONFIG[c.type].label} ${c.zone === "SUD" ? "Sud" : "Nord"} (${c.status.label.toLowerCase()})`);
   banner.textContent = "⚠ Stock critique : " + parts.join(" · ");
   return banner;
 }
 
 function renderConsumptionCharts(){
   const container = document.createElement("div");
+
+  const windowSwitch = document.createElement("div");
+  windowSwitch.className = "window-switch";
+  [14, 30].forEach(days => {
+    const btn = document.createElement("button");
+    btn.textContent = days + " jours";
+    if(consoWindowDays === days) btn.classList.add("active");
+    btn.addEventListener("click", () => { consoWindowDays = days; render(); });
+    windowSwitch.appendChild(btn);
+  });
+  container.appendChild(windowSwitch);
+
   const blocs = flatBlocs();
 
   Object.keys(TYPE_CONFIG).forEach(type => {
@@ -1241,7 +1376,7 @@ function renderConsumptionCharts(){
     h3.textContent = cfg.label + " — consommation moyenne par emplacement";
     const sub = document.createElement("div");
     sub.className = "chart-sub";
-    sub.textContent = `Moyenne journalière sur les ${CONSO_WINDOW_DAYS} derniers jours (${cfg.unit})`;
+    sub.textContent = `Moyenne journalière sur les ${consoWindowDays} derniers jours (${cfg.unit})`;
     section.appendChild(h3);
     section.appendChild(sub);
 
@@ -1288,40 +1423,68 @@ function renderStockPanel(){
 
   Object.keys(TYPE_CONFIG).forEach(type => {
     const cfg = TYPE_CONFIG[type];
-    const s = stock[type];
-    const status = stockStatus(type);
 
     const row = document.createElement("div");
     row.className = "stock-row";
 
-    const top = document.createElement("div");
-    top.className = "stock-row-top";
-    const label = document.createElement("div");
-    label.className = "stock-label";
-    label.textContent = cfg.label;
+    const typeHeader = document.createElement("div");
+    typeHeader.className = "stock-label";
+    typeHeader.style.marginBottom = "8px";
+    typeHeader.textContent = cfg.label;
+    row.appendChild(typeHeader);
 
-    const inputBlock = document.createElement("div");
-    inputBlock.className = "stock-input-block";
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.placeholder = "—";
-    if(s.qty !== null) input.value = s.qty;
-    input.addEventListener("change", (e) => updateStock(type, e.target.value));
-    const unit = document.createElement("span");
-    unit.className = "stock-unit";
-    unit.textContent = cfg.stockUnit;
-    inputBlock.appendChild(input);
-    inputBlock.appendChild(unit);
+    ["SUD","NORD"].forEach(zone => {
+      const s = stock[type][zone];
+      const status = stockStatus(type, zone);
 
-    top.appendChild(label);
-    top.appendChild(inputBlock);
-    row.appendChild(top);
+      const zoneRow = document.createElement("div");
+      zoneRow.className = "stock-zone-row";
+
+      const top = document.createElement("div");
+      top.className = "stock-row-top";
+      const zLabel = document.createElement("div");
+      zLabel.className = "stock-zone-label";
+      zLabel.innerHTML = `<span class="bloc-zone-dot zone-${zone}"></span>${zone === "SUD" ? "Sud" : "Nord"}`;
+
+      const inputBlock = document.createElement("div");
+      inputBlock.className = "stock-input-block";
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.placeholder = "—";
+      if(s.qty !== null) input.value = s.qty;
+      input.addEventListener("change", (e) => updateStock(type, zone, e.target.value));
+      const unitSpan = document.createElement("span");
+      unitSpan.className = "stock-unit";
+      unitSpan.textContent = cfg.stockUnit;
+      inputBlock.appendChild(input);
+      inputBlock.appendChild(unitSpan);
+
+      top.appendChild(zLabel);
+      top.appendChild(inputBlock);
+      zoneRow.appendChild(top);
+
+      const detail = document.createElement("div");
+      detail.className = "stock-detail";
+      const rateTxt = status.rate > 0
+        ? `conso. ~${status.rate.toFixed(1)} ${cfg.unit}/j (${consoWindowDays}j)`
+        : `pas de conso. sur ${consoWindowDays}j`;
+      const left = document.createElement("span");
+      left.textContent = rateTxt + (s.updatedAt ? " · maj " + formatDateTime(s.updatedAt) : "");
+      const tag = document.createElement("span");
+      tag.className = "stock-tag " + tagClass(status.tag);
+      tag.textContent = status.label;
+      detail.appendChild(left);
+      detail.appendChild(tag);
+      zoneRow.appendChild(detail);
+
+      row.appendChild(zoneRow);
+    });
 
     if(type === "essuie"){
       const ratioRow = document.createElement("div");
       ratioRow.className = "stock-input-block";
-      ratioRow.style.marginTop = "6px";
+      ratioRow.style.marginTop = "8px";
       ratioRow.style.justifyContent = "flex-end";
       const ratioLabel = document.createElement("span");
       ratioLabel.className = "stock-unit";
@@ -1331,26 +1494,18 @@ function renderStockPanel(){
       ratioInput.min = "1";
       ratioInput.placeholder = "?";
       ratioInput.style.width = "50px";
-      if(s.ratio) ratioInput.value = s.ratio;
+      if(stock.essuie.ratio) ratioInput.value = stock.essuie.ratio;
       ratioInput.addEventListener("change", (e) => updateRatio(e.target.value));
       ratioRow.appendChild(ratioLabel);
       ratioRow.appendChild(ratioInput);
       row.appendChild(ratioRow);
     }
 
-    const detail = document.createElement("div");
-    detail.className = "stock-detail";
-    const rateTxt = status.rate > 0
-      ? `conso. ~${status.rate.toFixed(1)} ${cfg.unit}/j (${CONSO_WINDOW_DAYS}j)`
-      : `pas de conso. sur ${CONSO_WINDOW_DAYS}j`;
-    const left = document.createElement("span");
-    left.textContent = rateTxt + (s.updatedAt ? " · maj " + formatDateTime(s.updatedAt) : "");
-    const tag = document.createElement("span");
-    tag.className = "stock-tag " + tagClass(status.tag);
-    tag.textContent = status.label;
-    detail.appendChild(left);
-    detail.appendChild(tag);
-    row.appendChild(detail);
+    const total = totalStockQty(type);
+    const totalRow = document.createElement("div");
+    totalRow.className = "stock-total-row";
+    totalRow.innerHTML = `<span>Total site</span><strong>${total === null ? "—" : (Math.round(total * 100) / 100)} ${cfg.stockUnit}</strong>`;
+    row.appendChild(totalRow);
 
     panel.appendChild(row);
   });
@@ -1389,7 +1544,7 @@ function renderStockEntriesPanel(){
       row.className = "access-row";
       row.innerHTML = `
         <div>
-          <span class="who">${cfg.label}</span> — ${e.qty} ${cfg.stockUnit}
+          <span class="who">${cfg.label}</span> — ${e.qty} ${cfg.stockUnit} <span class="role-badge ${e.zone === "SUD" ? "zone-badge-SUD" : "zone-badge-NORD"}">${e.zone === "SUD" ? "Sud" : "Nord"}</span>
           <div class="stat-sub">Achat ${e.purchaseDate || "—"} · Livraison ${e.deliveryDate || "—"} · ${e.createdBy}</div>
         </div>
         <div class="code">${(e.price || 0).toFixed(2)} €</div>
@@ -1412,6 +1567,19 @@ function renderStockEntriesPanel(){
   });
   panel.appendChild(typeList);
 
+  const zoneList = document.createElement("div");
+  zoneList.className = "type-list";
+  zoneList.style.marginTop = "6px";
+  [["SUD","Sud"],["NORD","Nord"]].forEach(([zoneVal, zoneLabel]) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "type-list-item" + (selectedStockEntryZone === zoneVal ? " selected" : "");
+    item.textContent = zoneLabel;
+    item.addEventListener("click", () => { selectedStockEntryZone = zoneVal; render(); });
+    zoneList.appendChild(item);
+  });
+  panel.appendChild(zoneList);
+
   const addRow = document.createElement("div");
   addRow.className = "access-add";
   addRow.innerHTML = `
@@ -1425,11 +1593,12 @@ function renderStockEntriesPanel(){
 
   panel.querySelector("#stockEntryAdd").addEventListener("click", () => {
     const type = selectedStockEntryType;
+    const zone = selectedStockEntryZone;
     const purchaseDate = panel.querySelector("#stockEntryPurchaseDate").value;
     const deliveryDate = panel.querySelector("#stockEntryDeliveryDate").value;
     const qty = parseFloat(panel.querySelector("#stockEntryQty").value);
     const price = parseFloat(panel.querySelector("#stockEntryPrice").value);
-    addStockEntry(type, purchaseDate, deliveryDate, qty, isNaN(price) ? 0 : price);
+    addStockEntry(type, zone, purchaseDate, deliveryDate, qty, isNaN(price) ? 0 : price);
   });
 
   return panel;
@@ -1604,7 +1773,7 @@ function renderConnexionsPanel(){
   const journal = document.createElement("div");
   journal.className = "journal";
 
-  const entries = connLog.slice().reverse().slice(0, 25);
+  const entries = connLog.slice().reverse(); // tout l'historique disponible (jusqu'au plafond de stockage)
   if(entries.length === 0){
     const empty = document.createElement("div");
     empty.className = "journal-empty";
@@ -1735,7 +1904,7 @@ function renderDirectionView(){
   const banner = renderAlertBanner();
   if(banner) mainContentEl.appendChild(banner);
 
-  mainContentEl.appendChild(collapsibleSection("stock", "Stock global au dépôt", renderStockPanel, false));
+  mainContentEl.appendChild(collapsibleSection("stock", "Stock global sur site", renderStockPanel, false));
   mainContentEl.appendChild(collapsibleSection("entries", "Entrées de stock (achats & livraisons)", renderStockEntriesPanel, false));
   mainContentEl.appendChild(collapsibleSection("cost", "Coût de la consommation", renderCostPanel, false));
   mainContentEl.appendChild(collapsibleSection("charts", "Consommation moyenne par emplacement", renderConsumptionCharts, false));
@@ -1782,6 +1951,7 @@ async function init(){
   await loadLog();
   await loadStock();
   await loadStockEntries();
+  tryResumeSession();
   render();
 }
 
