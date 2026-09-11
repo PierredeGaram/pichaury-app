@@ -23,7 +23,7 @@ exports.handler = async (event) => {
       const value = await store.get(key);
       return {
         statusCode: 200,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
         body: JSON.stringify({ value: value === undefined ? null : value }),
       };
     }
@@ -33,7 +33,7 @@ exports.handler = async (event) => {
       await store.set(key, body.value);
       return {
         statusCode: 200,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
         body: JSON.stringify({ ok: true }),
       };
     }
