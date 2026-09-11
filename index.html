@@ -596,7 +596,7 @@ function formatDateTime(iso){
 // jamais confondre "rien n'existe" avec "on n'a pas pu vérifier".
 async function apiGet(key){
   try{
-    const res = await fetch(`/.netlify/functions/storage?key=${encodeURIComponent(key)}`);
+    const res = await fetch(`/.netlify/functions/storage?key=${encodeURIComponent(key)}`, { cache: "no-store" });
     if(!res.ok) return { ok: false };
     const data = await res.json();
     return { ok: true, value: (data.value === undefined ? null : data.value) };
