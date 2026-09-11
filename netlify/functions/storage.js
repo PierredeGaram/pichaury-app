@@ -2,8 +2,16 @@ const { getStore } = require("@netlify/blobs");
 
 // Petite fonction API : GET pour lire une clé, POST pour l'écrire.
 // Sert de base de données partagée pour toute l'appli Pichaury.
+//
+// siteID/token fournis explicitement via des variables d'environnement Netlify
+// (BLOBS_SITE_ID / BLOBS_TOKEN), pour contourner un bug connu où Netlify n'injecte
+// pas toujours automatiquement le contexte Blobs dans la fonction.
 exports.handler = async (event) => {
-  const store = getStore("pichaury");
+  const store = getStore({
+    name: "pichaury",
+    siteID: process.env.BLOBS_SITE_ID,
+    token: process.env.BLOBS_TOKEN,
+  });
   const key = event.queryStringParameters && event.queryStringParameters.key;
 
   if (!key) {
