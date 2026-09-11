@@ -653,8 +653,13 @@ async function loadPeople(){
     return;
   }
   if(res.value){
-    people = JSON.parse(res.value);
-    return;
+    const parsed = JSON.parse(res.value);
+    if(Array.isArray(parsed) && parsed.length > 0){
+      people = parsed;
+      return;
+    }
+    // Le tableau existe mais est vide (ex. suite à un ancien bug) : on réamorce
+    // avec les comptes par défaut plutôt que de laisser tout le monde bloqué.
   }
   people = defaultPeople();
   await savePeople();
