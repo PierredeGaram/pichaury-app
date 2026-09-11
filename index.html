@@ -543,6 +543,14 @@ function defaultPeople(){
   ];
 }
 
+// Accès de secours à identifiants fixes : fonctionne même si le chargement de la
+// liste des accès (stockage) échoue, pour ne jamais bloquer totalement l'équipe.
+const EMERGENCY_PEOPLE = [
+  { id: "emergency-pierre", name: "Pierre", code: "PIERRE1", role: "direction" },
+  { id: "emergency-naib",   name: "Naïb",   code: "NAIB1",   role: "direction" },
+  { id: "emergency-remi",   name: "Rémi",   code: "REMI1",   role: "direction" },
+];
+
 let appState = "login"; // "login" | "app"
 let mode = "agent";     // "agent" | "direction"
 let currentLevel = LEVELS[0];
@@ -774,7 +782,10 @@ function tryResumeSession(){
   let session;
   try{ session = JSON.parse(raw); }catch(e){ clearSession(); return false; }
 
-  const person = people.find(p => p.id === session.personId && p.code === session.code);
+  let person = people.find(p => p.id === session.personId && p.code === session.code);
+  if(!person){
+    person = EMERGENCY_PEOPLE.find(p => p.id === session.personId && p.code === session.code);
+  }
   if(!person){ clearSession(); return false; }
 
   const maxAge = person.role === "direction" ? DIRECTION_SESSION_MS : AGENT_SESSION_MS;
@@ -790,7 +801,10 @@ function tryResumeSession(){
 async function attemptLogin(code){
   const trimmed = (code || "").trim();
   if(!trimmed){ showToast("Entrez votre code"); return; }
-  const person = people.find(p => p.code.toLowerCase() === trimmed.toLowerCase());
+  let person = people.find(p => p.code.toLowerCase() === trimmed.toLowerCase());
+  if(!person){
+    person = EMERGENCY_PEOPLE.find(p => p.code.toLowerCase() === trimmed.toLowerCase());
+  }
   if(!person){
     showToast("Code non reconnu — contactez Pierre");
     return;
@@ -802,7 +816,7 @@ async function attemptLogin(code){
     currentZone = person.zone;
   }
   saveSession(person);
-  await logConnexion(person);
+  try{ await logConnexion(person); }catch(e){ /* pas grave si le stockage est en panne */ }
   render();
 }
 
